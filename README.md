@@ -70,16 +70,70 @@ pio device monitor -b 115200
 
 If your board variant is 8MB, use `waveshare_esp32_c6_touch_lcd_147_8mb`.
 
+## Controlling expressions
+
+Send newline-terminated ASCII commands. Expressions: `IDLE HAPPY THINKING LISTENING SPEAKING CONFUSED SLEEPING`.
+`STATE HAPPY` and the shorthand `HAPPY` are equivalent. Every command gets a reply (`OK ...` / `ERR ...`) on the link that sent it.
+
+**From your computer (USB):** see [Accessing the terminal interface](#accessing-the-terminal-interface), then type `STATE HAPPY` + Enter.
+
+**From the second ESP32 (audio board) over UART:** wire a cross-connected UART link to the display board's `Serial1`:
+
+| Display board | Audio ESP32 |
+|---|---|
+| GPIO17 (RX) | its TX pin |
+| GPIO16 (TX) | its RX pin |
+| GND | GND |
+
+115200 8N1, 3.3 V logic. Pins/baud are overridable via `BMO_PIN_LINK_RX`, `BMO_PIN_LINK_TX`, `BMO_LINK_BAUD`. On the audio ESP32 (Arduino):
+
+```cpp
+Serial1.begin(115200, SERIAL_8N1, /*rx=*/RX_PIN, /*tx=*/TX_PIN);
+Serial1.println("LISTENING");   // wake word heard
+Serial1.println("THINKING");    // processing
+Serial1.println("SPEAKING");    // playing reply
+Serial1.println("IDLE");
+```
+
+Verify GPIO16/17 are free on your header before wiring.
+
 ## Serial commands
 
-Commands are newline-delimited:
+Commands are newline-delimited, case-insensitive, max 95 characters.
 
-```text
-HELP
-STATUS
-NEXT
-BLINK
-STATE IDLE|HAPPY|THINKING|LISTENING|SPEAKING|CONFUSED|SLEEPING
-TALK ON|OFF|TOGGLE
-DEBUG ON|OFF|TOGGLE
-```
+| Command | Effect | Reply |
+|---|---|---|
+| `HELP` | Print the command list | command list |
+| `STATUS` | Print current state | `{"state":"HAPPY","talk":false,"debug":false}` |
+| `NEXT` | Advance to the next expression | `OK STATE <name>` |
+| `BLINK` | Trigger a blink | `OK BLINK` |
+| `STATE <name>` | Set expression | `OK STATE <name>` |
+| `<name>` | Shorthand for `STATE <name>` | `OK STATE <name>` |
+| `TALK ON` / `OFF` / `TOGGLE` | Talking mouth animation | `OK TALK ON\|OFF` |
+| `DEBUG ON` / `OFF` / `TOGGLE` | Auto-cycle expressions every 4 s | `OK DEBUG ON\|OFF` |
+
+`<name>` is one of `IDLE`, `HAPPY`, `THINKING`, `LISTENING`, `SPEAKING`, `CONFUSED`, `SLEEPING`.
+
+Errors: `ERR unknown state`, `ERR unknown command`, `ERR TALK expects ON/OFF/TOGGLE`, `ERR DEBUG expects ON/OFF/TOGGLE`, `ERR command too long`.
+
+BOOT button (GPIO9): short press = `NEXT`, double press = `BLINK`, hold ≥1.2 s = `TALK TOGGLE`, hold ≥3 s = `DEBUG TOGGLE`. Each press is logged as `BTN ...`.
+
+## Accessing the terminal interface
+
+The board's USB-C port appears as a serial device (USB-Serial/JTAG, 115200 baud). The same console carries commands, replies, boot messages and button logs.
+
+1. Plug in the board and find the port: `ls /dev/cu.usbmodem*` (macOS) or `ls /dev/ttyACM*` (Linux).
+2. Set up PlatformIO once: `python3 -m venv .venv && .venv/bin/pip install platformio`.
+3. Open the monitor:
+   ```bash
+   .venv/bin/pio device monitor -p /dev/cu.usbmodemXXXX -b 115200 --echo --eol LF
+   ```
+4. Type a command (e.g. `HAPPY`) and press Enter. Exit with Ctrl+C.
+
+Alternatives: `screen /dev/cu.usbmodemXXXX 115200` (exit: Ctrl+A, K, Y), or a one-shot `echo "HAPPY" > /dev/cu.usbmodemXXXX`.
+
+Notes:
+- Only one program can hold the port; close the monitor before flashing.
+- Opening the port can reset the board (DTR/RTS toggle); wait about a second for the boot banner.
+- Do not hold BOOT while connecting; that enters download mode and the face won't show. Hold BOOT + tap RESET only to flash when upload fails.
+- If the port is missing, replug the cable (use a data cable).

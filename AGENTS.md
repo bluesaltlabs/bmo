@@ -25,3 +25,9 @@ This project keeps agent guidance in-repo so implementation stays aligned with t
 - Preserve a local-first architecture and phase boundaries from `CONTEXT.md`.
 - Keep display firmware independent of audio, Pi, or network code in Phase 1.
 - Use explicit serial commands and deterministic state transitions for debugging and future integration.
+
+## Environment preferences
+
+- Never use the system-wide temp directory (`/tmp`, `$TMPDIR`) for venvs, caches, build output, or scratch files. Keep them inside the repo (e.g. `.venv/`, `.pio/`, `.tmp/`), and make sure they are gitignored.
+- Run PlatformIO from the repo-local venv: `.venv/bin/pio`.
+- Always pass an explicit `--upload-port` / `-p` (e.g. `/dev/cu.usbmodem*`); auto-detect may pick a Bluetooth port.

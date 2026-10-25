@@ -29,6 +29,15 @@
 #ifndef BMO_PIN_LCD_BL
 #define BMO_PIN_LCD_BL 22
 #endif
+#ifndef BMO_PIN_LINK_RX
+#define BMO_PIN_LINK_RX 17
+#endif
+#ifndef BMO_PIN_LINK_TX
+#define BMO_PIN_LINK_TX 16
+#endif
+#ifndef BMO_LINK_BAUD
+#define BMO_LINK_BAUD 115200
+#endif
 #ifndef BMO_LCD_WIDTH
 #define BMO_LCD_WIDTH 172
 #endif
@@ -539,19 +548,23 @@ void drawFace(uint32_t nowMs) {
   gfx->flush();
 }
 
+// Replies go to whichever link (USB or link UART) sent the command.
+Print *replyTo = &Serial;
+
 void printHelp() {
-  Serial.println("Commands:");
-  Serial.println("  HELP");
-  Serial.println("  STATUS");
-  Serial.println("  NEXT");
-  Serial.println("  BLINK");
-  Serial.println("  STATE <IDLE|HAPPY|THINKING|LISTENING|SPEAKING|CONFUSED|SLEEPING>");
-  Serial.println("  TALK <ON|OFF|TOGGLE>");
-  Serial.println("  DEBUG <ON|OFF|TOGGLE>");
+  replyTo->println("Commands:");
+  replyTo->println("  HELP");
+  replyTo->println("  STATUS");
+  replyTo->println("  NEXT");
+  replyTo->println("  BLINK");
+  replyTo->println("  STATE <IDLE|HAPPY|THINKING|LISTENING|SPEAKING|CONFUSED|SLEEPING>");
+  replyTo->println("  <IDLE|HAPPY|THINKING|LISTENING|SPEAKING|CONFUSED|SLEEPING>  (shorthand)");
+  replyTo->println("  TALK <ON|OFF|TOGGLE>");
+  replyTo->println("  DEBUG <ON|OFF|TOGGLE>");
 }
 
 void printStatus() {
-  Serial.printf(
+  replyTo->printf(
       "{\"state\":\"%s\",\"talk\":%s,\"debug\":%s}\n",
       expressionToString(currentExpression),
       talkingAnimationEnabled ? "true" : "false",
@@ -561,17 +574,17 @@ void printStatus() {
 bool parseOnOffToggle(const char *value, bool &target, const char *label) {
   if (strcmp(value, "ON") == 0) {
     target = true;
-    Serial.printf("OK %s ON\n", label);
+    replyTo->printf("OK %s ON\n", label);
     return true;
   }
   if (strcmp(value, "OFF") == 0) {
     target = false;
-    Serial.printf("OK %s OFF\n", label);
+    replyTo->printf("OK %s OFF\n", label);
     return true;
   }
   if (strcmp(value, "TOGGLE") == 0) {
     target = !target;
-    Serial.printf("OK %s %s\n", label, target ? "ON" : "OFF");
+    replyTo->printf("OK %s %s\n", label, target ? "ON" : "OFF");
     return true;
   }
   return false;
@@ -595,12 +608,12 @@ void processCommand(char *line) {
   }
   if (strcmp(line, "NEXT") == 0) {
     cycleExpression();
-    Serial.printf("OK STATE %s\n", expressionToString(currentExpression));
+    replyTo->printf("OK STATE %s\n", expressionToString(currentExpression));
     return;
   }
   if (strcmp(line, "BLINK") == 0) {
     startBlink(millis());
-    Serial.println("OK BLINK");
+    replyTo->println("OK BLINK");
     return;
   }
   if (startsWith(line, "STATE ")) {
@@ -608,18 +621,26 @@ void processCommand(char *line) {
     trimInPlace(stateArg);
     Expression parsed = Expression::Idle;
     if (!parseExpression(stateArg, parsed)) {
-      Serial.println("ERR unknown state");
+      replyTo->println("ERR unknown state");
       return;
     }
     setExpression(parsed);
-    Serial.printf("OK STATE %s\n", expressionToString(currentExpression));
+    replyTo->printf("OK STATE %s\n", expressionToString(currentExpression));
     return;
+  }
+  {
+    Expression shorthand = Expression::Idle;
+    if (parseExpression(line, shorthand)) {
+      setExpression(shorthand);
+      replyTo->printf("OK STATE %s\n", expressionToString(currentExpression));
+      return;
+    }
   }
   if (startsWith(line, "TALK ")) {
     char *arg = line + 5;
     trimInPlace(arg);
     if (!parseOnOffToggle(arg, talkingAnimationEnabled, "TALK")) {
-      Serial.println("ERR TALK expects ON/OFF/TOGGLE");
+      replyTo->println("ERR TALK expects ON/OFF/TOGGLE");
     }
     return;
   }
@@ -627,7 +648,7 @@ void processCommand(char *line) {
     char *arg = line + 6;
     trimInPlace(arg);
     if (!parseOnOffToggle(arg, debugAutoCycleEnabled, "DEBUG")) {
-      Serial.println("ERR DEBUG expects ON/OFF/TOGGLE");
+      replyTo->println("ERR DEBUG expects ON/OFF/TOGGLE");
     }
     if (debugAutoCycleEnabled) {
       lastDebugCycleAtMs = millis();
@@ -635,28 +656,38 @@ void processCommand(char *line) {
     return;
   }
 
-  Serial.println("ERR unknown command");
+  replyTo->println("ERR unknown command");
 }
 
-void pollSerial() {
-  while (Serial.available() > 0) {
-    const char incoming = static_cast<char>(Serial.read());
+void pollStream(Stream &port, char *buffer, size_t &length) {
+  while (port.available() > 0) {
+    const char incoming = static_cast<char>(port.read());
     if (incoming == '\r') {
       continue;
     }
     if (incoming == '\n') {
-      commandBuffer[commandBufferLength] = '\0';
-      processCommand(commandBuffer);
-      commandBufferLength = 0;
+      buffer[length] = '\0';
+      length = 0;
+      replyTo = &port;
+      processCommand(buffer);
+      replyTo = &Serial;
       continue;
     }
-    if (commandBufferLength + 1 >= kCommandBufferSize) {
-      commandBufferLength = 0;
-      Serial.println("ERR command too long");
+    if (length + 1 >= kCommandBufferSize) {
+      length = 0;
+      port.println("ERR command too long");
       continue;
     }
-    commandBuffer[commandBufferLength++] = incoming;
+    buffer[length++] = incoming;
   }
+}
+
+char linkBuffer[kCommandBufferSize] = {};
+size_t linkBufferLength = 0;
+
+void pollSerial() {
+  pollStream(Serial, commandBuffer, commandBufferLength);
+  pollStream(Serial1, linkBuffer, linkBufferLength);
 }
 
 void handleButtonActionShortPress() {
@@ -751,6 +782,7 @@ void setup() {
   digitalWrite(BMO_PIN_LCD_BL, HIGH);
 
   Serial.begin(115200);
+  Serial1.begin(BMO_LINK_BAUD, SERIAL_8N1, BMO_PIN_LINK_RX, BMO_PIN_LINK_TX);
   delay(200);
   Serial.println();
   Serial.println("BMO Phase 1 face engine booting...");
