@@ -47,3 +47,17 @@ Scope: display-only animated face engine on the Waveshare ESP32-C6 1.47" LCD boa
 - Fixed during testing: unsigned timestamp underflow in the audio loop that caused false retries and `LINK LOST/UP`.
 - Known quirks: C6 boot log noise on GPIO16/17 (UART0 pins); retries continue after an `ERR` reply.
 - Wiring physically verified; early boot-loop symptoms occurred before the final wiring was in place.
+
+## Phase 3+ link and Pi-awareness decisions (planned)
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 19 | Pi connects to each ESP32 by its own direct UART; USB only for flashing and debugging | Runtime independence: no USB enumeration, DTR/RTS resets or boot-order dependence, and the ESP32s can tell the Pi is absent. |
+| 20 | Audio ESP32 does not relay Pi traffic; the audio-to-display UART remains a local fast path | Avoids a single point of failure and extra forwarding load on the audio chip. |
+| 21 | One 5 V rail powers the Pi and both ESP32s; ESP32s are not powered from Pi USB | ESP32s boot in about 1 s versus 20-40 s for the Pi, so they can answer while it boots. Avoid USB back-power conflicts. |
+| 22 | `PI_READY` GPIO (pulldown on ESP32) plus `PING`/`PONG` heartbeat feed a per-board state machine: `OFF`, `BOOTING`, `READY`, `DEGRADED`, `LOST` | Hardware line works even if Pi software hangs; the heartbeat confirms the service is alive. |
+| 23 | Standalone mode: audio ESP32 runs wake/command words on-chip (ESP-SR), maps them to faces, and plays flash-stored clips when the Pi is not `READY` | Required to work in a limited way without the Pi. No TTS or networking needed. |
+| 24 | Face arbitration: a fresh Pi command wins; local commands apply briefly or when the Pi is not `READY` | Prevents the Pi and the audio chip fighting over the face. |
+| 25 | Protocol additions: `PI <state>`, `WAKE <word>`; binary framing only when audio streaming starts | Keeps the ASCII protocol backwards-compatible. |
+
+Open: exact Pi UART choice (UART0 vs a second overlay UART), WROOM GPIOs for the Pi link and `PI_READY` (avoid 0, 2, 12, 15 and I2S pins), and flash partition size for audio clips.
