@@ -2,6 +2,15 @@
 
 Local-first desk robot project inspired by *Adventure Time* BMO.
 
+## What exists so far
+
+- Phase 1 firmware (`src/main.cpp`): animated face on the Waveshare ESP32-C6 1.47" LCD, flashed and running on the dev board.
+- PlatformIO project (`platformio.ini`) using the pioarduino platform (required for Arduino on ESP32-C6).
+- Agent and skill docs: `AGENTS.md`, `agents/`, `skills/`.
+- Design record: [DECISIONS.md](DECISIONS.md). Roadmap: [CONTEXT.md](CONTEXT.md).
+- Not yet built: audio, wake word, Raspberry Pi link, networking (later phases).
+- Known open items: flicker fix awaiting visual confirmation; serial `STATUS` not yet verified at runtime.
+
 ## Phase 1 (implemented)
 
 Phase 1 targets only the Waveshare ESP32-C6 1.47 LCD board and delivers a standalone face engine with:
@@ -23,6 +32,8 @@ Phase 1 targets only the Waveshare ESP32-C6 1.47 LCD board and delivers a standa
 ```text
 .
 ├── AGENTS.md
+├── CONTEXT.md
+├── DECISIONS.md
 ├── agents/
 ├── skills/
 ├── platformio.ini
@@ -53,7 +64,7 @@ Default display tuning flags:
 
 ```bash
 pio run -e waveshare_esp32_c6_lcd_147_4mb
-pio run -e waveshare_esp32_c6_lcd_147_4mb -t upload
+pio run -e waveshare_esp32_c6_lcd_147_4mb -t upload --upload-port /dev/cu.usbmodemXXXX
 pio device monitor -b 115200
 ```
 
