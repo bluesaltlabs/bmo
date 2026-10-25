@@ -78,6 +78,8 @@ enum class Expression : uint8_t {
   Speaking,
   Confused,
   Sleeping,
+  Angry,
+  Sad,
   Count
 };
 
@@ -140,14 +142,22 @@ size_t commandBufferLength = 0;
 PanelLayout panelLayout{};
 bool frameBaseDrawn = false;
 
-uint16_t colorBackground;
-uint16_t colorPanel;
-uint16_t colorPanelAccent;
-uint16_t colorFaceDark;
-uint16_t colorFaceLight;
+// Reference palette: #63bda4 body, #171717 ink, #0099cb dot, #ffb600 debug, #ff66cc talk.
+uint16_t colorScreen;
+uint16_t colorInk;
 uint16_t colorMouth;
-uint16_t colorText;
+uint16_t colorTongue;
+uint16_t colorTeeth;
+uint16_t colorTalk;
 uint16_t colorDebug;
+
+struct ScreenRect {
+  int16_t x = 0;
+  int16_t y = 0;
+  int16_t w = 0;
+  int16_t h = 0;
+};
+ScreenRect screenRect{};
 
 int16_t clampToRange(int32_t value, int16_t minValue, int16_t maxValue) {
   if (value < minValue) {
@@ -175,6 +185,10 @@ const char *expressionToString(Expression expression) {
       return "CONFUSED";
     case Expression::Sleeping:
       return "SLEEPING";
+    case Expression::Angry:
+      return "ANGRY";
+    case Expression::Sad:
+      return "SAD";
     default:
       return "UNKNOWN";
   }
@@ -235,6 +249,14 @@ bool parseExpression(char *value, Expression &outExpression) {
     outExpression = Expression::Sleeping;
     return true;
   }
+  if (strcmp(value, "ANGRY") == 0) {
+    outExpression = Expression::Angry;
+    return true;
+  }
+  if (strcmp(value, "SAD") == 0) {
+    outExpression = Expression::Sad;
+    return true;
+  }
   return false;
 }
 
@@ -258,21 +280,12 @@ void refreshLayout() {
 }
 
 void drawFrameBase() {
-  gfx->fillScreen(colorBackground);
-  gfx->fillRoundRect(
-      panelLayout.panelX,
-      panelLayout.panelY,
-      panelLayout.panelW,
-      panelLayout.panelH,
-      panelLayout.panelRadius,
-      colorPanelAccent);
-  gfx->drawRoundRect(
-      panelLayout.panelX,
-      panelLayout.panelY,
-      panelLayout.panelW,
-      panelLayout.panelH,
-      panelLayout.panelRadius,
-      colorPanel);
+  // Face only: the physical device provides the body, bezel and button.
+  gfx->fillScreen(colorScreen);
+  screenRect.x = 0;
+  screenRect.y = 0;
+  screenRect.w = panelLayout.screenWidth;
+  screenRect.h = panelLayout.screenHeight;
   frameBaseDrawn = true;
 }
 
@@ -305,12 +318,6 @@ float currentEyeOpenFactor(uint32_t nowMs) {
   }
 
   if (!blinkActive) {
-    if (currentExpression == Expression::Thinking) {
-      return 0.85f;
-    }
-    if (currentExpression == Expression::Confused) {
-      return 0.75f;
-    }
     return 1.0f;
   }
 
@@ -372,8 +379,9 @@ void drawArc(
   constexpr float kDegToRad = 3.14159265f / 180.0f;
   for (int16_t ring = 0; ring < thickness; ++ring) {
     const int16_t radiusWithThickness = radius + ring;
-    for (int16_t deg = startDeg; deg <= endDeg; ++deg) {
-      const float rad = static_cast<float>(deg) * kDegToRad;
+    const float stepRad = 0.5f / static_cast<float>(radiusWithThickness);
+    const float endRad = static_cast<float>(endDeg) * kDegToRad;
+    for (float rad = static_cast<float>(startDeg) * kDegToRad; rad <= endRad; rad += stepRad) {
       const int16_t x = centerX + static_cast<int16_t>(roundf(cosf(rad) * radiusWithThickness));
       const int16_t y = centerY + static_cast<int16_t>(roundf(sinf(rad) * radiusWithThickness));
       gfx->drawPixel(x, y, color);
@@ -381,84 +389,219 @@ void drawArc(
   }
 }
 
-void drawEye(
-    int16_t centerX,
-    int16_t centerY,
-    int16_t width,
-    int16_t height,
-    float openFactor,
-    const PupilOffset &pupilOffset) {
-  if (openFactor <= 0.08f) {
-    gfx->fillRoundRect(centerX - (width / 2), centerY - 1, width, 3, 1, colorFaceDark);
+void fillHalfEllipse(int16_t cx, int16_t cy, int16_t rx, int16_t ry, bool bottom, uint16_t color) {
+  if (ry < 1) {
     return;
   }
-
-  int16_t renderedHeight = static_cast<int16_t>(roundf(static_cast<float>(height) * openFactor));
-  if (renderedHeight < 4) {
-    renderedHeight = 4;
+  for (int16_t dy = 0; dy <= ry; ++dy) {
+    const float ratio = static_cast<float>(dy) / static_cast<float>(ry);
+    const int16_t halfW = static_cast<int16_t>(roundf(static_cast<float>(rx) * sqrtf(1.0f - (ratio * ratio))));
+    gfx->drawFastHLine(cx - halfW, bottom ? cy + dy : cy - dy, (halfW * 2) + 1, color);
   }
-
-  const int16_t top = centerY - (renderedHeight / 2);
-  const int16_t radius = renderedHeight > 8 ? 6 : (renderedHeight / 2);
-
-  gfx->fillRoundRect(centerX - (width / 2), top, width, renderedHeight, radius, colorFaceLight);
-  gfx->drawRoundRect(centerX - (width / 2), top, width, renderedHeight, radius, colorPanel);
-
-  int16_t pupilRadius = renderedHeight / 4;
-  if (pupilRadius < 2) {
-    pupilRadius = 2;
-  }
-
-  const int16_t pupilClampX = (width / 2) - pupilRadius - 2;
-  const int16_t pupilClampY = (renderedHeight / 2) - pupilRadius - 1;
-  const int16_t pupilX = centerX + constrain(pupilOffset.x, -pupilClampX, pupilClampX);
-  const int16_t pupilY = centerY + constrain(pupilOffset.y, -pupilClampY, pupilClampY);
-  gfx->fillCircle(pupilX, pupilY, pupilRadius, colorFaceDark);
 }
 
-void drawMouth(uint32_t nowMs, int16_t centerX, int16_t centerY, int16_t mouthWidth) {
+void fillCapsule(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t r, uint16_t color) {
+  const float dx = static_cast<float>(x1 - x0);
+  const float dy = static_cast<float>(y1 - y0);
+  const float len = sqrtf((dx * dx) + (dy * dy));
+  gfx->fillCircle(x0, y0, r, color);
+  gfx->fillCircle(x1, y1, r, color);
+  if (len < 1.0f) {
+    return;
+  }
+  const int16_t nx = static_cast<int16_t>(roundf((-dy / len) * r));
+  const int16_t ny = static_cast<int16_t>(roundf((dx / len) * r));
+  gfx->fillTriangle(x0 + nx, y0 + ny, x0 - nx, y0 - ny, x1 + nx, y1 + ny, color);
+  gfx->fillTriangle(x0 - nx, y0 - ny, x1 - nx, y1 - ny, x1 + nx, y1 + ny, color);
+}
+
+// Shallow arc through endpoints (cx +/- halfWidth, cy) that bulges by `sag` pixels.
+void drawCurve(int16_t cx, int16_t cy, int16_t halfWidth, int16_t sag, int16_t thickness, bool smile, uint16_t color) {
+  const float hw = static_cast<float>(halfWidth);
+  const float s = static_cast<float>(sag);
+  const float radius = ((hw * hw) + (s * s)) / (2.0f * s);
+  const float halfAngle = asinf(hw / radius) * 180.0f / 3.14159265f;
+  const int16_t r = static_cast<int16_t>(roundf(radius));
+  if (smile) {
+    drawArc(cx, cy + sag - r, r, static_cast<int16_t>(90.0f - halfAngle), static_cast<int16_t>(90.0f + halfAngle), thickness, color);
+  } else {
+    drawArc(cx, cy - sag + r, r, static_cast<int16_t>(270.0f - halfAngle), static_cast<int16_t>(270.0f + halfAngle), thickness, color);
+  }
+}
+
+void drawDotEye(int16_t x, int16_t y, int16_t r, float openFactor) {
+  int16_t ry = static_cast<int16_t>(roundf(static_cast<float>(r) * openFactor));
+  if (ry < 1) {
+    ry = 1;
+  }
+  gfx->fillEllipse(x, y, r, ry, colorInk);
+}
+
+void drawClosedEye(int16_t x, int16_t y, bool happy) {
+  if (happy) {
+    drawArc(x, y + 8, 9, 215, 325, 3, colorInk);
+  } else {
+    drawArc(x, y - 8, 9, 35, 145, 3, colorInk);
+  }
+}
+
+// D-shaped open mouth: flat top at y, curved bottom.
+void drawOpenMouth(int16_t cx, int16_t y, int16_t rx, int16_t ry, bool teeth) {
+  fillHalfEllipse(cx, y, rx + 2, ry + 2, true, colorInk);
+  gfx->fillRect(cx - rx - 2, y - 1, (rx * 2) + 5, 3, colorInk);
+  fillHalfEllipse(cx, y + 1, rx, ry, true, colorMouth);
+  if (ry >= 11) {
+    gfx->fillEllipse(cx, y + ((ry * 7) / 10), (rx * 55) / 100, (ry * 28) / 100, colorTongue);
+  }
+  if (teeth) {
+    gfx->fillRect(cx - ((rx * 85) / 100), y + 1, (rx * 170) / 100, 5, colorTeeth);
+  }
+}
+
+void drawEyesAndMouth(uint32_t nowMs) {
+  const int16_t cx = screenRect.x + (screenRect.w / 2);
+  int16_t faceW = static_cast<int16_t>((screenRect.h * 17) / 10);
+  if (faceW > screenRect.w) {
+    faceW = screenRect.w;
+  }
+  const int16_t eyeDX = (faceW * 32) / 100;
+  const int16_t leftX = cx - eyeDX;
+  const int16_t rightX = cx + eyeDX;
+  const int16_t eyeY = screenRect.y + ((screenRect.h * 36) / 100);
+  const int16_t mouthY = screenRect.y + ((screenRect.h * 56) / 100);
+
+  const float open = currentEyeOpenFactor(nowMs);
+  const PupilOffset offL = getPupilOffset(true, nowMs);
+  const PupilOffset offR = getPupilOffset(false, nowMs);
+
   const uint16_t phase = (nowMs / 90U) % 8U;
-  const int16_t talkingHeight = phase < 4 ? phase * 3 : (8 - phase) * 3;
-  const bool animateSpeaking = talkingAnimationEnabled || currentExpression == Expression::Speaking;
-  const int16_t halfMouthWidth = mouthWidth / 2;
+  const int16_t talkHeight = phase < 4 ? phase * 3 : (8 - phase) * 3;
+  const bool speakingMouth = currentExpression == Expression::Speaking ||
+                             (talkingAnimationEnabled && currentExpression != Expression::Sleeping);
 
   switch (currentExpression) {
     case Expression::Idle:
-      gfx->fillRoundRect(centerX - halfMouthWidth, centerY - 2, mouthWidth, 4, 2, colorMouth);
+      drawDotEye(leftX + offL.x, eyeY + offL.y, 6, open);
+      drawDotEye(rightX + offR.x, eyeY + offR.y, 6, open);
+      gfx->fillRect(rightX + 2, eyeY - 12, 10, 2, colorInk);
       break;
     case Expression::Happy:
-      drawArc(centerX, centerY - 6, halfMouthWidth + 2, 22, 158, 3, colorMouth);
+      drawClosedEye(leftX, eyeY, true);
+      drawClosedEye(rightX, eyeY, true);
       break;
     case Expression::Thinking:
-      gfx->fillRoundRect(centerX - (halfMouthWidth - 4), centerY - 2, mouthWidth - 8, 4, 2, colorMouth);
-      gfx->fillCircle(centerX + halfMouthWidth + 4, centerY, 2, colorMouth);
-      gfx->fillCircle(centerX + halfMouthWidth + 12, centerY + 2, 3, colorMouth);
+      drawDotEye(leftX + offL.x, eyeY + offL.y, 6, open);
+      gfx->drawCircle(rightX, eyeY, 8, colorInk);
+      gfx->drawCircle(rightX, eyeY, 4, colorInk);
+      gfx->fillCircle(rightX, eyeY, 1, colorInk);
       break;
     case Expression::Listening:
-      gfx->drawRoundRect(centerX - 12, centerY - 8, 24, 16, 6, colorMouth);
+      drawDotEye(leftX + offL.x, eyeY + offL.y, 8, open);
+      drawDotEye(rightX + offR.x, eyeY + offR.y, 8, open);
       break;
-    case Expression::Speaking: {
-      int16_t mouthHeight = animateSpeaking ? (10 + talkingHeight) : 10;
-      if (mouthHeight > 22) {
-        mouthHeight = 22;
+    case Expression::Speaking:
+      drawDotEye(leftX + offL.x, eyeY + offL.y, 12, open);
+      drawDotEye(rightX + offR.x, eyeY + offR.y, 12, open);
+      break;
+    case Expression::Confused: {
+      const int16_t wob = (nowMs / 300U) % 2U == 0U ? 0 : 2;
+      gfx->fillEllipse(leftX - 4, eyeY - 6 + wob, 6, 9, colorInk);
+      gfx->fillEllipse(rightX + 4, eyeY - 8 - wob, 6, 9, colorInk);
+      for (int8_t i = 0; i < 3; ++i) {
+        const int16_t zx = leftX - 14 + (i * 5);
+        const int16_t zy = eyeY + 12 + ((i % 2) * 5);
+        gfx->drawLine(zx, zy, zx + 5, (i % 2) == 0 ? zy + 5 : zy - 5, colorInk);
+        const int16_t wx = rightX + 6 + (i * 5);
+        gfx->drawLine(wx, zy, wx + 5, (i % 2) == 0 ? zy + 5 : zy - 5, colorInk);
       }
-      gfx->fillRoundRect(
-          centerX - (halfMouthWidth + 6),
-          centerY - (mouthHeight / 2),
-          mouthWidth + 12,
-          mouthHeight,
-          8,
-          colorMouth);
       break;
     }
-    case Expression::Confused:
-      gfx->drawLine(centerX - halfMouthWidth, centerY + 4, centerX - (halfMouthWidth / 2), centerY - 2, colorMouth);
-      gfx->drawLine(centerX - (halfMouthWidth / 2), centerY - 2, centerX, centerY + 4, colorMouth);
-      gfx->drawLine(centerX, centerY + 4, centerX + (halfMouthWidth / 2), centerY - 2, colorMouth);
-      gfx->drawLine(centerX + (halfMouthWidth / 2), centerY - 2, centerX + halfMouthWidth, centerY + 4, colorMouth);
-      break;
     case Expression::Sleeping:
-      gfx->fillRoundRect(centerX - 10, centerY + 2, 20, 3, 1, colorMouth);
+      drawClosedEye(leftX, eyeY, false);
+      drawClosedEye(rightX, eyeY, false);
+      gfx->setTextColor(colorInk);
+      gfx->setTextSize(2);
+      gfx->setCursor(rightX + 12, eyeY - 30);
+      gfx->print("z");
+      gfx->setTextSize(1);
+      gfx->print("Z");
+      break;
+    case Expression::Angry: {
+      for (int8_t side = -1; side <= 1; side += 2) {
+        const int16_t ex = side < 0 ? leftX : rightX;
+        drawDotEye(ex, eyeY, 5, open);
+        gfx->drawFastHLine(ex - 11, eyeY - 9, 22, colorInk);
+        gfx->drawFastHLine(ex - 9, eyeY + 9, 18, colorInk);
+        gfx->drawLine(ex - (side * 12), eyeY - 15, ex + (side * 10), eyeY - 8, colorInk);
+        gfx->drawLine(ex - (side * 12), eyeY - 14, ex + (side * 10), eyeY - 7, colorInk);
+      }
+      break;
+    }
+    case Expression::Sad:
+      for (int8_t side = -1; side <= 1; side += 2) {
+        const int16_t ex = side < 0 ? leftX : rightX;
+        drawDotEye(ex + (side < 0 ? offL.x : offR.x), eyeY + 2, 5, open);
+        gfx->fillRect(ex - 8, eyeY - 6, 17, 3, colorInk);
+      }
+      break;
+    default:
+      break;
+  }
+
+  // Mouths
+  if (speakingMouth) {
+    int16_t ry = static_cast<int16_t>(6 + talkHeight);
+    drawOpenMouth(cx, mouthY - 6, 26, ry, ry >= 12);
+    return;
+  }
+
+  switch (currentExpression) {
+    case Expression::Idle:
+      drawCurve(cx, mouthY, 46, 6, 3, true, colorInk);
+      break;
+    case Expression::Happy:
+      drawArc(cx, mouthY - 16, 20, 20, 160, 4, colorInk);
+      break;
+    case Expression::Thinking: {
+      const int16_t bob = static_cast<int16_t>(sinf(static_cast<float>(nowMs) / 400.0f) * 2.0f);
+      fillCapsule(cx - 6, mouthY + 12 + bob, cx + 8, mouthY - 6 + bob, 10, colorInk);
+      fillCapsule(cx - 6, mouthY + 12 + bob, cx + 8, mouthY - 6 + bob, 8, colorMouth);
+      break;
+    }
+    case Expression::Listening:
+      drawOpenMouth(cx, mouthY - 2, 22, 8 + static_cast<int16_t>(sinf(static_cast<float>(nowMs) / 500.0f) * 2.0f), false);
+      break;
+    case Expression::Confused: {
+      const int16_t r = 15;
+      const int16_t my = mouthY + 18;
+      drawArc(cx, my, r - 5, 180, 360, 11, colorInk);
+      gfx->fillCircle(cx - r, my, 5, colorInk);
+      gfx->fillCircle(cx + r, my, 5, colorInk);
+      drawArc(cx, my, r - 3, 180, 360, 7, colorMouth);
+      gfx->fillCircle(cx - r, my, 3, colorMouth);
+      gfx->fillCircle(cx + r, my, 3, colorMouth);
+      break;
+    }
+    case Expression::Sleeping: {
+      const int16_t breath = static_cast<int16_t>(sinf(static_cast<float>(nowMs) / 700.0f) * 3.0f);
+      const int16_t ry = 12 + breath;
+      fillHalfEllipse(cx, mouthY + 14, 20, ry + 2, false, colorInk);
+      fillHalfEllipse(cx, mouthY + 14, 18, ry, false, colorMouth);
+      break;
+    }
+    case Expression::Angry: {
+      const int16_t shake = static_cast<int16_t>((nowMs / 60U) % 3U) - 1;
+      const int16_t mx = cx + shake;
+      gfx->fillRoundRect(mx - 32, mouthY - 10, 64, 28, 9, colorInk);
+      gfx->fillRoundRect(mx - 29, mouthY - 7, 58, 22, 7, colorTeeth);
+      gfx->fillRect(mx - 29, mouthY + 2, 58, 4, colorMouth);
+      gfx->fillRect(mx - 15, mouthY - 7, 2, 22, colorInk);
+      gfx->fillRect(mx, mouthY - 7, 2, 22, colorInk);
+      gfx->fillRect(mx + 15, mouthY - 7, 2, 22, colorInk);
+      break;
+    }
+    case Expression::Sad:
+      drawCurve(cx, mouthY + 4, 36, 5, 3, false, colorInk);
       break;
     default:
       break;
@@ -466,83 +609,20 @@ void drawMouth(uint32_t nowMs, int16_t centerX, int16_t centerY, int16_t mouthWi
 }
 
 void drawFace(uint32_t nowMs) {
-  if (!frameBaseDrawn) {
-    drawFrameBase();
-  }
+  drawFrameBase();
+  drawEyesAndMouth(nowMs);
 
-  const int16_t panelInnerX = panelLayout.panelX + 2;
-  const int16_t panelInnerY = panelLayout.panelY + 2;
-  const int16_t panelInnerW = panelLayout.panelW - 4;
-  const int16_t panelInnerH = panelLayout.panelH - 4;
-  const int16_t eyeWidth = clampToRange(panelLayout.screenWidth / 5, 36, 70);
-  const int16_t eyeHeight = clampToRange(panelLayout.screenHeight / 5, 20, 38);
-  const int16_t leftEyeX = (panelLayout.screenWidth * 32) / 100;
-  const int16_t rightEyeX = panelLayout.screenWidth - leftEyeX;
-  const int16_t eyeY = (panelLayout.screenHeight * 40) / 100;
-  const int16_t mouthY = (panelLayout.screenHeight * 72) / 100;
-  const int16_t mouthWidth = clampToRange(panelLayout.screenWidth / 6, 40, 60);
-
-  auto clearZone = [&](int16_t x, int16_t y, int16_t w, int16_t h) {
-    if (w <= 0 || h <= 0) {
-      return;
-    }
-    if (x < panelInnerX) {
-      w -= (panelInnerX - x);
-      x = panelInnerX;
-    }
-    if (y < panelInnerY) {
-      h -= (panelInnerY - y);
-      y = panelInnerY;
-    }
-    const int16_t panelInnerMaxX = panelInnerX + panelInnerW;
-    const int16_t panelInnerMaxY = panelInnerY + panelInnerH;
-    if ((x + w) > panelInnerMaxX) {
-      w = panelInnerMaxX - x;
-    }
-    if ((y + h) > panelInnerMaxY) {
-      h = panelInnerMaxY - y;
-    }
-    if (w > 0 && h > 0) {
-      gfx->fillRect(x, y, w, h, colorPanelAccent);
-    }
-  };
-
-  clearZone(panelInnerX + 8, panelInnerY + 4, panelInnerW - 16, 18);
-  clearZone(leftEyeX - (eyeWidth / 2) - 14, eyeY - (eyeHeight / 2) - 14, (rightEyeX - leftEyeX) + eyeWidth + 28, eyeHeight + 34);
-  clearZone((panelLayout.screenWidth / 2) - 94, mouthY - 32, 188, 50);
-
-  const float eyeOpenFactor = currentEyeOpenFactor(nowMs);
-
-  if (currentExpression == Expression::Sleeping) {
-    drawEye(leftEyeX, eyeY, eyeWidth, eyeHeight, 0.02f, {0, 0});
-    drawEye(rightEyeX, eyeY, eyeWidth, eyeHeight, 0.02f, {0, 0});
-    gfx->setTextColor(colorMouth);
-    gfx->setTextSize(1);
-    gfx->setCursor(rightEyeX + (eyeWidth / 2) - 8, eyeY - eyeHeight);
-    gfx->print("zZ");
-  } else if (currentExpression == Expression::Happy) {
-    drawEye(leftEyeX, eyeY, eyeWidth + 2, eyeHeight, 0.75f * eyeOpenFactor, getPupilOffset(true, nowMs));
-    drawEye(rightEyeX, eyeY, eyeWidth + 2, eyeHeight, 0.75f * eyeOpenFactor, getPupilOffset(false, nowMs));
-  } else if (currentExpression == Expression::Confused) {
-    drawEye(leftEyeX, eyeY, eyeWidth - 4, eyeHeight - 4, eyeOpenFactor, getPupilOffset(true, nowMs));
-    drawEye(rightEyeX, eyeY + 3, eyeWidth - 10, eyeHeight - 8, eyeOpenFactor * 0.85f, getPupilOffset(false, nowMs));
-  } else {
-    drawEye(leftEyeX, eyeY, eyeWidth, eyeHeight, eyeOpenFactor, getPupilOffset(true, nowMs));
-    drawEye(rightEyeX, eyeY, eyeWidth, eyeHeight, eyeOpenFactor, getPupilOffset(false, nowMs));
-  }
-
-  drawMouth(nowMs, panelLayout.screenWidth / 2, mouthY, mouthWidth);
-
-  gfx->setTextColor(colorText);
-  gfx->setTextSize(1);
-  gfx->setCursor(panelLayout.panelX + 10, panelLayout.panelY + 8);
-  gfx->print(expressionToString(currentExpression));
-
+  const int16_t indicatorY = 8;
+  const int16_t dotX = screenRect.w - 10;
   if (talkingAnimationEnabled) {
-    gfx->fillCircle(panelLayout.panelX + panelLayout.panelW - 16, panelLayout.panelY + 11, 4, colorText);
+    gfx->fillCircle(dotX, indicatorY, 4, colorTalk);
   }
   if (debugAutoCycleEnabled) {
-    gfx->fillCircle(panelLayout.panelX + panelLayout.panelW - 30, panelLayout.panelY + 11, 4, colorDebug);
+    gfx->fillCircle(dotX - 12, indicatorY, 4, colorDebug);
+    gfx->setTextColor(colorInk);
+    gfx->setTextSize(1);
+    gfx->setCursor(6, 4);
+    gfx->print(expressionToString(currentExpression));
   }
 
   gfx->flush();
@@ -551,24 +631,32 @@ void drawFace(uint32_t nowMs) {
 // Replies go to whichever link (USB or link UART) sent the command.
 Print *replyTo = &Serial;
 
+constexpr uint32_t kLinkTimeoutMs = 3000;
+bool linkAlive = false;
+uint32_t lastLinkRxAtMs = 0;
+bool commandFromLink = false;
+
 void printHelp() {
   replyTo->println("Commands:");
   replyTo->println("  HELP");
   replyTo->println("  STATUS");
   replyTo->println("  NEXT");
   replyTo->println("  BLINK");
-  replyTo->println("  STATE <IDLE|HAPPY|THINKING|LISTENING|SPEAKING|CONFUSED|SLEEPING>");
-  replyTo->println("  <IDLE|HAPPY|THINKING|LISTENING|SPEAKING|CONFUSED|SLEEPING>  (shorthand)");
+  replyTo->println("  STATE <IDLE|HAPPY|THINKING|LISTENING|SPEAKING|CONFUSED|SLEEPING|ANGRY|SAD>");
+  replyTo->println("  <IDLE|HAPPY|THINKING|LISTENING|SPEAKING|CONFUSED|SLEEPING|ANGRY|SAD>  (shorthand)");
+  replyTo->println("  FACE <IDLE|...>  (link command, replies ACK FACE <name>)");
+  replyTo->println("  PING  (heartbeat, replies PONG)");
   replyTo->println("  TALK <ON|OFF|TOGGLE>");
   replyTo->println("  DEBUG <ON|OFF|TOGGLE>");
 }
 
 void printStatus() {
   replyTo->printf(
-      "{\"state\":\"%s\",\"talk\":%s,\"debug\":%s}\n",
+      "{\"state\":\"%s\",\"talk\":%s,\"debug\":%s,\"link\":%s}\n",
       expressionToString(currentExpression),
       talkingAnimationEnabled ? "true" : "false",
-      debugAutoCycleEnabled ? "true" : "false");
+      debugAutoCycleEnabled ? "true" : "false",
+      linkAlive ? "true" : "false");
 }
 
 bool parseOnOffToggle(const char *value, bool &target, const char *label) {
@@ -597,6 +685,37 @@ void processCommand(char *line) {
   }
 
   uppercaseInPlace(line);
+
+  // Any well-formed command from the link counts as a heartbeat.
+  const bool fromLink = commandFromLink;
+  auto markLinkAlive = [&]() {
+    if (fromLink) {
+      if (!linkAlive) {
+        Serial.println("LINK UP");
+      }
+      linkAlive = true;
+      lastLinkRxAtMs = millis();
+    }
+  };
+
+  if (strcmp(line, "PING") == 0) {
+    markLinkAlive();
+    replyTo->println("PONG");
+    return;
+  }
+  if (startsWith(line, "FACE ")) {
+    char *faceArg = line + 5;
+    trimInPlace(faceArg);
+    Expression parsedFace = Expression::Idle;
+    if (!parseExpression(faceArg, parsedFace)) {
+      replyTo->println("ERR unknown face");
+      return;
+    }
+    markLinkAlive();
+    setExpression(parsedFace);
+    replyTo->printf("ACK FACE %s\n", expressionToString(currentExpression));
+    return;
+  }
 
   if (strcmp(line, "HELP") == 0) {
     printHelp();
@@ -659,7 +778,7 @@ void processCommand(char *line) {
   replyTo->println("ERR unknown command");
 }
 
-void pollStream(Stream &port, char *buffer, size_t &length) {
+void pollStream(Stream &port, char *buffer, size_t &length, bool isLink) {
   while (port.available() > 0) {
     const char incoming = static_cast<char>(port.read());
     if (incoming == '\r') {
@@ -669,7 +788,9 @@ void pollStream(Stream &port, char *buffer, size_t &length) {
       buffer[length] = '\0';
       length = 0;
       replyTo = &port;
+      commandFromLink = isLink;
       processCommand(buffer);
+      commandFromLink = false;
       replyTo = &Serial;
       continue;
     }
@@ -686,8 +807,16 @@ char linkBuffer[kCommandBufferSize] = {};
 size_t linkBufferLength = 0;
 
 void pollSerial() {
-  pollStream(Serial, commandBuffer, commandBufferLength);
-  pollStream(Serial1, linkBuffer, linkBufferLength);
+  pollStream(Serial, commandBuffer, commandBufferLength, false);
+  pollStream(Serial1, linkBuffer, linkBufferLength, true);
+
+  // Fail safe: if the audio board goes silent, return to idle once.
+  if (linkAlive && (millis() - lastLinkRxAtMs) > kLinkTimeoutMs) {
+    linkAlive = false;
+    setExpression(Expression::Idle);
+    talkingAnimationEnabled = false;
+    Serial.println("LINK LOST -> IDLE");
+  }
 }
 
 void handleButtonActionShortPress() {
@@ -798,14 +927,14 @@ void setup() {
     }
   }
 
-  colorBackground = gfx->color565(8, 22, 120);
-  colorPanel = gfx->color565(6, 16, 88);
-  colorPanelAccent = gfx->color565(18, 42, 168);
-  colorFaceDark = gfx->color565(2, 8, 40);
-  colorFaceLight = gfx->color565(232, 242, 255);
-  colorMouth = gfx->color565(6, 14, 64);
-  colorText = gfx->color565(214, 232, 255);
-  colorDebug = gfx->color565(255, 215, 64);
+  // BMO palette: #63bda4 body, #171717 ink, #0099cb dot, #ffb600 debug, #ff66cc talk.
+  colorScreen = gfx->color565(210, 252, 228);
+  colorInk = gfx->color565(23, 23, 23);
+  colorMouth = gfx->color565(67, 148, 89);
+  colorTongue = gfx->color565(120, 205, 130);
+  colorTeeth = gfx->color565(255, 253, 253);
+  colorTalk = gfx->color565(255, 102, 204);
+  colorDebug = gfx->color565(255, 182, 0);
 
   refreshLayout();
   drawFrameBase();

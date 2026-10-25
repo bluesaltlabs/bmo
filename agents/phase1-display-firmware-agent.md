@@ -7,7 +7,7 @@ Deliver a standalone BMO face engine for the Waveshare ESP32-C6 1.47 board using
 ## Scope
 
 - Initialize LCD and backlight.
-- Render expressions: `idle`, `happy`, `thinking`, `listening`, `speaking`, `confused`, `sleeping`.
+- Render expressions: `idle`, `happy`, `thinking`, `listening`, `speaking`, `confused`, `sleeping`, `angry`, `sad` (styled after `bmo-faces.jpg`).
 - Run nonblocking animation loop with automatic blink and pupil movement.
 - Support BOOT button controls:
   - single short press: cycle expression

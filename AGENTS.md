@@ -4,7 +4,9 @@ This project keeps agent guidance in-repo so implementation stays aligned with t
 
 ## Phase focus
 
-**Current implementation phase:** Phase 1 (display-only animated face engine on Waveshare ESP32-C6 1.47 LCD board).
+**Completed:** Phase 1 (display face engine on Waveshare ESP32-C6 1.47 LCD) and Phase 2 (second ESP32-WROOM audio board linked by UART with ACK, heartbeat and timeout).
+
+**Current implementation phase:** Phase 3 (audio hardware), not started. See `DECISIONS.md` for what was decided so far.
 
 ## Agent registry
 
@@ -23,7 +25,7 @@ This project keeps agent guidance in-repo so implementation stays aligned with t
 ## Coordination rules
 
 - Preserve a local-first architecture and phase boundaries from `CONTEXT.md`.
-- Keep display firmware independent of audio, Pi, or network code in Phase 1.
+- Keep display firmware independent of audio, Pi, or network code; the audio board talks to it only through the UART protocol (`FACE`, `PING`).
 - Use explicit serial commands and deterministic state transitions for debugging and future integration.
 
 ## Environment preferences
