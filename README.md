@@ -12,6 +12,24 @@ Local-first desk robot project inspired by *Adventure Time* BMO.
 - Not yet built: audio hardware, wake word, Raspberry Pi link, networking (Phase 3 onward).
 - Known open items: none for Phase 2. Phase 1 serial `STATUS` is now verified.
 
+## Voice engine (Phase 3 start)
+
+BMO's speech is a small on-device formant synthesizer (`lib/bmo_voice/`): text, then rule-based phonemes, then a glottal source through formant resonators, then 16 kHz mono PCM. It needs no heap, network or voice files, and the same code runs on the ESP32 and on this computer.
+
+Try it on this machine (macOS, no extra installs):
+
+```bash
+voice_demo/run.sh                          # plays the demo phrases
+voice_demo/run.sh "Hello! I am BMO."       # speak a line
+voice_demo/run.sh -i                       # type lines interactively
+voice_demo/run.sh --wav out.wav "text"     # write a WAV only
+voice_demo/run.sh --pitch 380 --formant 1.3 --crush 8 "text"   # tune the voice
+```
+
+Tuning flags: `--pitch --speed --formant --inflect --rough --breath --crush --hold --volume`, `--clean` (unprocessed), `--mouth` (prints mouth-openness trace). Bit-crush and sample-hold effects are off by default to avoid added static; enable them with `--crush` and `--hold`. Defaults live in `VoiceConfig::bmo()` in `lib/bmo_voice/src/bmo_voice.h`.
+
+Firmware bring-up: `.venv/bin/pio run -e voice_esp32_wroom -t upload --upload-port <port>` speaks lines typed on the serial console through an I2S DAC (placeholder pins in `platformio.ini`; builds but not yet run on hardware). `Voice::mouth()` gives 0..255 mouth openness for the face's speaking animation.
+
 ## Phase 1 (implemented)
 
 Phase 1 targets only the Waveshare ESP32-C6 1.47 LCD board and delivers a standalone face engine with:

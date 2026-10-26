@@ -1,0 +1,7 @@
+{
+  "name": "bmo_voice",
+  "version": "0.1.0",
+  "description": "BMO text-to-speech: dependency-free formant synthesizer shared by the ESP32 firmware and the host demo.",
+  "frameworks": "*",
+  "platforms": "*"
+}

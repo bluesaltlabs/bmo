@@ -61,3 +61,15 @@ Scope: display-only animated face engine on the Waveshare ESP32-C6 1.47" LCD boa
 | 25 | Protocol additions: `PI <state>`, `WAKE <word>`; binary framing only when audio streaming starts | Keeps the ASCII protocol backwards-compatible. |
 
 Open: exact Pi UART choice (UART0 vs a second overlay UART), WROOM GPIOs for the Pi link and `PI_READY` (avoid 0, 2, 12, 15 and I2S pins), and flash partition size for audio clips.
+
+## Voice engine decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 26 | On-device formant synthesizer (`lib/bmo_voice/`), not neural TTS, for the audio ESP32's own speech | Needs no model storage, network or Pi, so it works standalone; neural TTS (Piper) stays an option on the Pi. |
+| 27 | One C++ library with no heap/IO, built for both ESP32 and host (`voice_demo/run.sh`) | Voice can be tuned on the Mac with identical code before hardware exists. |
+| 28 | BMO character from parameters: ~340 Hz pitch, formants x1.28, expressive intonation and subtle vibrato; bit-crush and sample-hold are optional effects, off by default | Keeps the characterful pitch/formants while avoiding unnecessary static. Defaults are being iteratively tuned by ear against the user's single-speaker reference. |
+| 29 | Rule-based letter-to-sound plus a small exception dictionary; numbers are spelled out | Small footprint; mispronunciations are fixed by adding dictionary entries. |
+| 30 | `Voice::mouth()` (0..255) exposed for lip-sync | Drives the display's SPEAKING face over the existing `FACE` link later. |
+
+Open: compare by ear against the user-provided BMO-only monologue (https://www.youtube.com/watch?v=qswatNKP3YY); the measurement is only a starting point. DAC/amp and I2S pins (placeholders 26/25/22) are undecided.

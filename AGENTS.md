@@ -8,6 +8,8 @@ This project keeps agent guidance in-repo so implementation stays aligned with t
 
 **Current implementation phase:** Phase 3 (audio hardware), not started. See `DECISIONS.md` for what was decided so far.
 
+- Voice engine work lives in `lib/bmo_voice/` (shared ESP32/host code), with the host demo in `voice_demo/` and firmware bring-up in `voice_src/`.
+
 ## Agent registry
 
 1. `agents/phase1-display-firmware-agent.md`  
