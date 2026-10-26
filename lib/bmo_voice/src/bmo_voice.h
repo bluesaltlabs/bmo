@@ -9,16 +9,18 @@
 namespace bmo {
 
 struct VoiceConfig {
-  float pitch_hz = 340.0f;      // average fundamental frequency
+  float pitch_hz = 260.0f;      // speaking register; syllable accents move above/below it
   float speed = 1.0f;           // 1.0 = normal, higher = faster
   float formant_scale = 1.28f;  // >1 shifts formants up (smaller, childlike vocal tract)
-  float inflection = 1.25f;     // pitch movement: 0 = monotone, 1 = natural, >1 = chirpy
+  float inflection = 1.35f;     // pitch movement: 0 = monotone, 1 = natural, >1 = expressive
   float roughness = 0.12f;      // pitch jitter / raspiness (0..1)
-  float breathiness = 0.025f;   // aspiration noise mixed into voiced sounds (0..1)
-  float vibrato = 0.022f;       // pitch wobble depth (fraction of f0)
+  float breathiness = 0.012f;   // aspiration noise mixed into voiced sounds (0..1)
+  float vibrato = 0.006f;       // subtle microvariation, not a sustained singing wobble
   uint8_t crush_bits = 0;       // quantisation depth for the retro game-console grit (0 = off)
   uint8_t hold = 1;             // sample-and-hold factor (1 = off); lowers effective bandwidth
   float volume = 0.85f;         // 0..1
+  float frication = 0.30f;      // s/sh/f consonant level; independent of voiced brightness (0..1)
+  float lowpass_hz = 0.0f;      // optional whole-voice low-pass (0 = bypass)
 
   // The default BMO preset.
   static VoiceConfig bmo() { return VoiceConfig(); }
@@ -62,8 +64,10 @@ class Voice {
  private:
   struct Item {
     uint8_t ph;
-    uint8_t stress;
+    uint8_t stress; // 0 = unstressed, 1 = accented, 2 = emphatic (!)
     uint8_t pitch;  // pitch multiplier in percent
+    uint8_t pitchEnd;
+    uint8_t length; // phoneme duration in percent
   };
   struct Reso {
     float a = 0, b = 0, c = 0, y1 = 0, y2 = 0;
@@ -75,10 +79,21 @@ class Voice {
       return y;
     }
   };
+  struct NoiseBand {
+    float b0 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+    void set(float freq, float bw, float fs);
+    float run(float x) {
+      const float y = b0 * x + z1;
+      z1 = -a1 * y + z2;
+      z2 = -b0 * x - a2 * y;
+      return y;
+    }
+  };
 
   bool fetchWord();
   bool nextSegment();
   void loadSegment(const void* seg, const Item& it);
+  uint32_t segmentSamples(const void* seg, const Item& it) const;
   void updateCoefs();
   float noise();
   int16_t sample();
@@ -92,21 +107,24 @@ class Voice {
   const char* pos_ = nullptr;
   int clauseLeft_ = 0, clauseTotal_ = 0;
   char clauseEnd_ = '.';
+  bool questionRise_ = true;
 
   Item queue_[48];
   uint8_t qHead_ = 0, qLen_ = 0;
   Item cur_;
   uint8_t curSeg_ = 0, curSegs_ = 0;
-  uint32_t segLeft_ = 0;
+  uint32_t segLeft_ = 0, segTotal_ = 0;
+  uint32_t phoneLeft_ = 0, phoneTotal_ = 0;
 
   // Targets (t*) and smoothed state (s*).
   float tf_[3] = {500, 1500, 2500}, sf_[3] = {500, 1500, 2500};
   float tav_ = 0, sav_ = 0, tan_ = 0, san_ = 0, tnf_ = 3000, snf_ = 3000, tnbw_ = 2000, snbw_ = 2000;
+  float tasp_ = 0, sasp_ = 0;
   float tp_ = 1, sp_ = 1;
-  bool noiseThroughTract_ = false;
   float aF_ = 0, aA_ = 0, aN_ = 0, aP_ = 0, aSoft_ = 0;
 
-  Reso r_[5], nr_;
+  Reso r_[5];
+  NoiseBand nr_;
   float phase_ = 0, jit_ = 1, vibPhase_ = 0, vib_ = 0;
   uint32_t rng_ = 12345, ctr_ = 0, holdCtr_ = 0;
   float held_ = 0, mouth_ = 0, soft_ = 0;

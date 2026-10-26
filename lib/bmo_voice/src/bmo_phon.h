@@ -7,7 +7,7 @@
 namespace bmo {
 
 enum Ph : uint8_t {
-  IY, IH, EH, AE, AA, AO, UH, UW, AH, ER, AY, EY, OW, OY, AW,
+  IY, IH, EH, AE, AA, AO, UH, UW, AH, ER, AY, EY, OW, OY, AW, AX,
   W, Y, L, R, M, N, NG,
   F, V, S, Z, SH, ZH, TH, DH, HH,
   P, B, T, D, K, G, CH, JH,

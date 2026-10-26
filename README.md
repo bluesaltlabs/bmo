@@ -23,10 +23,12 @@ voice_demo/run.sh                          # plays the demo phrases
 voice_demo/run.sh "Hello! I am BMO."       # speak a line
 voice_demo/run.sh -i                       # type lines interactively
 voice_demo/run.sh --wav out.wav "text"     # write a WAV only
-voice_demo/run.sh --pitch 380 --formant 1.3 --crush 8 "text"   # tune the voice
+voice_demo/run.sh --pitch 280 --inflect 1.5 "text"            # tune the voice
 ```
 
-Tuning flags: `--pitch --speed --formant --inflect --rough --breath --crush --hold --volume`, `--clean` (unprocessed), `--mouth` (prints mouth-openness trace). Bit-crush and sample-hold effects are off by default to avoid added static; enable them with `--crush` and `--hold`. Defaults live in `VoiceConfig::bmo()` in `lib/bmo_voice/src/bmo_voice.h`.
+Tuning flags: `--pitch --speed --formant --inflect --rough --breath --vibrato --frication --lowpass --crush --hold --volume`, `--clean` (unprocessed), `--mouth` (prints mouth-openness trace). `--frication` adjusts hiss-producing consonants independently (default `0.30`; lower is gentler). The whole-voice low-pass is bypassed by default; `--lowpass 4200` enables the previous roll-off for comparison. Bit-crush and sample-hold effects are off by default to avoid added static; enable them with `--crush` and `--hold`. Defaults live in `VoiceConfig::bmo()` in `lib/bmo_voice/src/bmo_voice.h`.
+
+The current preset uses a 260 Hz speaking register, continuous syllable accents, phrase endings and subtle vibrato, calibrated against an actual BMO monologue. It remains a formant approximation of the voice. See [the evaluation and listening instructions](voice_demo/EVALUATION.md) for measurements, limitations, and repeatable before/after comparisons.
 
 Firmware bring-up: `.venv/bin/pio run -e voice_esp32_wroom -t upload --upload-port <port>` speaks lines typed on the serial console through an I2S DAC (placeholder pins in `platformio.ini`; builds but not yet run on hardware). `Voice::mouth()` gives 0..255 mouth openness for the face's speaking animation.
 

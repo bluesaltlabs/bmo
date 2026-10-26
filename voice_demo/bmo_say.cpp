@@ -3,7 +3,7 @@
 //   bmo_say                             play the built-in demo phrases
 //   bmo_say -i                          interactive: type lines, hear them
 //   bmo_say --wav out.wav "text"        write only, no playback
-// Tuning: --pitch HZ --speed X --formant X --inflect X --rough X --breath X --crush BITS --hold N --volume X
+// Tuning: --pitch HZ --speed X --formant X --inflect X --rough X --breath X --vibrato X --frication X --lowpass HZ --crush BITS --hold N --volume X
 //         --clean (unprocessed synth preset) --mouth (print mouth-openness trace)
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,6 +73,9 @@ int main(int argc, char** argv) {
     else if (a == "--inflect") cfg.inflection = val();
     else if (a == "--rough") cfg.roughness = val();
     else if (a == "--breath") cfg.breathiness = val();
+    else if (a == "--vibrato") cfg.vibrato = val();
+    else if (a == "--frication") cfg.frication = val();
+    else if (a == "--lowpass") cfg.lowpass_hz = val();
     else if (a == "--crush") cfg.crush_bits = static_cast<uint8_t>(val());
     else if (a == "--hold") cfg.hold = static_cast<uint8_t>(val());
     else if (a == "--volume") cfg.volume = val();

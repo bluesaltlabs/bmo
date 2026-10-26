@@ -1,5 +1,5 @@
 // Compact rule-based English letter-to-sound plus the phoneme acoustic table.
-// Deliberately small (fits on an ESP32); mispronunciations are part of the charm.
+// Deliberately small (fits on an ESP32); common words use explicit pronunciations.
 #include <ctype.h>
 #include <string.h>
 
@@ -28,6 +28,7 @@ const PhDef kPhones[PH_COUNT] = {
     {"OW", 2, true, {VOW(570, 900, 2410, 90), VOW(330, 870, 2240, 85)}},
     {"OY", 2, true, {VOW(570, 840, 2410, 100), VOW(330, 2100, 2800, 85)}},
     {"AW", 2, true, {VOW(730, 1090, 2440, 100), VOW(340, 900, 2240, 90)}},
+    {"AX", 1, true, {VOW(480, 1450, 2500, 65)}}, // reduced unstressed vowel (schwa)
 
     {"W", 1, false, {SON(290, 610, 2150, 55, 80)}},
     {"Y", 1, false, {SON(260, 2070, 3020, 55, 80)}},
@@ -68,8 +69,8 @@ struct Entry {
 };
 
 const Entry kDict[] = {
-    {"the", "~DH AH"},     {"a", "~AH"},          {"an", "~AE N"},       {"of", "~AH V"},
-    {"to", "~T UW"},       {"and", "~AE N D"},    {"is", "~IH Z"},       {"are", "~AA R"},
+    {"the", "~DH AX"},     {"a", "~AX"},          {"an", "~AX N"},       {"of", "~AX V"},
+    {"to", "~T UW"},       {"and", "~AX N D"},    {"is", "~IH Z"},       {"are", "~AA R"},
     {"was", "~W AH Z"},    {"in", "~IH N"},       {"on", "~AA N"},       {"at", "~AE T"},
     {"it", "~IH T"},       {"my", "~M AY"},       {"for", "~F AO R"},    {"or", "~AO R"},
     {"as", "~AE Z"},       {"be", "B IY"},        {"i", "AY"},           {"you", "Y UW"},
@@ -86,7 +87,7 @@ const Entry kDict[] = {
     {"look", "L UH K"},    {"book", "B UH K"},    {"put", "P UH T"},     {"full", "F UH L"},
     {"yes", "Y EH S"},     {"no", "N OW"},        {"so", "S OW"},        {"go", "G OW"},
     {"oh", "OW"},          {"hi", "HH AY"},       {"hey", "HH EY"},      {"bye", "B AY"},
-    {"hello", "HH EH 'L OW"},  {"okay", "OW 'K EY"},  {"please", "P L IY Z"},
+    {"hello", "HH AX 'L OW"},  {"okay", "OW 'K EY"},  {"please", "P L IY Z"},
     {"friend", "F R EH N D"},  {"friends", "F R EH N D Z"},
     {"bmo", "'B IY M OW"}, {"video", "V IH D IY OW"},  {"games", "G EY M Z"},
     {"adventure", "AE D 'V EH N CH ER"},  {"world", "W ER L D"},   {"word", "W ER D"},
@@ -95,11 +96,26 @@ const Entry kDict[] = {
     {"want", "W AA N T"},  {"could", "K UH D"},   {"would", "W UH D"},   {"should", "SH UH D"},
     {"because", "B IH K AO Z"},  {"again", "AH G EH N"},  {"every", "EH V R IY"},
     {"know", "N OW"},      {"thanks", "TH AE NG K S"},    {"computer", "K AH M P Y UW T ER"},
-    {"are", "~AA R"},      {"night", "N AY T"},   {"light", "L AY T"},   {"play", "P L EY"},
-    {"today", "T AH D EY"},    {"tomorrow", "T AH M AA R OW"},   {"sorry", "S AA R IY"},
+    {"night", "N AY T"},   {"light", "L AY T"},   {"play", "P L EY"},
+    {"today", "T AX 'D EY"},    {"tomorrow", "T AX 'M AA R OW"},   {"sorry", "S AA R IY"},
     {"made", "M EY D"},    {"name", "N EY M"},    {"zero", "Z IY R OW"}, {"three", "TH R IY"},
     {"five", "F AY V"},    {"six", "S IH K S"},   {"seven", "S EH V AH N"},  {"nine", "N AY N"},
     {"hundred", "HH AH N D R AH D"},   {"thousand", "TH AW Z AH N D"},
+    {"am", "~AE M"}, {"i'm", "AY M"}, {"i've", "AY V"}, {"i'll", "AY L"},
+    {"you're", "Y AO R"}, {"you've", "Y UW V"}, {"you'll", "Y UW L"},
+    {"we're", "W IY R"}, {"we've", "W IY V"}, {"we'll", "W IY L"},
+    {"don't", "D OW N T"}, {"can't", "K AE N T"}, {"won't", "W OW N T"},
+    {"isn't", "IH Z AX N T"}, {"aren't", "AA R N T"},
+    {"it's", "~IH T S"}, {"that's", "DH AE T S"}, {"let's", "L EH T S"},
+    {"grown", "G R OW N"}, {"everything", "EH V R IY TH IH NG"},
+    {"still", "S T IH L"}, {"waking", "W EY K IH NG"}, {"wait", "W EY T"},
+    {"something", "S AH M TH IH NG"}, {"working", "W ER K IH NG"},
+    {"morning", "M AO R N IH NG"}, {"messages", "M EH S AX JH IH Z"},
+    {"battery", "B AE T ER IY"}, {"electricity", "IH L EH K 'T R IH S AX T IY"},
+    {"eleven", "IH 'L EH V AX N"}, {"twelve", "T W EH L V"},
+    {"thirteen", "TH ER 'T IY N"}, {"fourteen", "F AO R 'T IY N"},
+    {"fifteen", "F IH F 'T IY N"}, {"sixteen", "S IH K S 'T IY N"},
+    {"seventeen", "S EH V AX N 'T IY N"}, {"eighteen", "EY 'T IY N"}, {"nineteen", "N AY N 'T IY N"},
 };
 
 bool isVow(char c) { return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u'; }
@@ -128,11 +144,11 @@ size_t fromDict(const char* spec, Out& o) {
   }
   bool marked = strchr(spec, '\'') != nullptr;
   bool stressDone = false;
+  bool pendingStress = false;
   while (*spec) {
     while (*spec == ' ') ++spec;
-    bool mark = false;
     if (*spec == '\'') {
-      mark = true;
+      pendingStress = true;
       ++spec;
     }
     const char* s = spec;
@@ -140,7 +156,7 @@ size_t fromDict(const char* spec, Out& o) {
     int id = lookupPh(s, spec - s);
     if (id < 0 || o.n >= o.max) continue;
     uint8_t v = static_cast<uint8_t>(id);
-    if (kPhones[id].vowel && !unstressed && !stressDone && (mark || !marked)) {
+    if (kPhones[id].vowel && !unstressed && !stressDone && (pendingStress || !marked)) {
       v |= 0x80;
       stressDone = true;
     }
@@ -342,7 +358,6 @@ size_t wordToPhonemes(const char* word, size_t len, uint8_t* out, size_t max) {
   w.n = 0;
   for (size_t i = 0; i < len && w.n < 39; ++i) {
     char c = static_cast<char>(tolower(static_cast<unsigned char>(word[i])));
-    if (c == '\'') continue;
     w.s[w.n++] = c;
   }
   w.s[w.n] = 0;
@@ -352,7 +367,13 @@ size_t wordToPhonemes(const char* word, size_t len, uint8_t* out, size_t max) {
   for (const Entry& e : kDict) {
     if (static_cast<size_t>(w.n) == strlen(e.word) && memcmp(e.word, w.s, w.n) == 0) return fromDict(e.ph, o);
   }
-  // Plural/possessive of a dictionary word ("friends", "bmo's" handled via apostrophe removal).
+  // Keep apostrophes for dictionary lookup: "I'll" and "ill", "we're" and
+  // "were" need different pronunciations. Unknown words use the old fallback.
+  int letters = 0;
+  for (int i = 0; i < w.n; ++i)
+    if (w.s[i] != '\'') w.s[letters++] = w.s[i];
+  w.n = letters;
+  w.s[w.n] = 0;
   rules(w, o);
   autoStress(out, o.n, w.n);
   return o.n;
