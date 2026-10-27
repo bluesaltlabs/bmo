@@ -1,230 +1,113 @@
 # BMO
 
-Local-first desk robot project inspired by *Adventure Time* BMO.
+A local-first desk robot inspired by *Adventure Time* BMO, pronounced **BEEMO**.
+Two ESP32 boards handle the face and audio hardware; a Raspberry Pi is the
+planned local speech and conversation host. The voice must work without a
+running Mac or cloud service.
 
-## What exists so far
+## Current status
 
-- Phase 1 firmware (`src/main.cpp`): animated face on the Waveshare ESP32-C6 1.47" LCD, flashed and running on the dev board.
-- Phase 2 firmware (`audio_src/main.cpp`): ESP32-WROOM stand-in sending `FACE` commands over UART with ACK, heartbeat and timeout. Verified on hardware.
-- PlatformIO project (`platformio.ini`) using the pioarduino platform (required for Arduino on ESP32-C6).
-- Local Piper speech (`speech/`): installed and tested on the Mac, with setup for a 64-bit Raspberry Pi and an explicit formant backup.
-- Agent and skill docs: `AGENTS.md`, `agents/`, `skills/`.
-- Design record: [DECISIONS.md](DECISIONS.md). Roadmap: [CONTEXT.md](CONTEXT.md).
-- Not yet built: audio hardware, wake word, Raspberry Pi link, networking (Phase 3 onward).
-- Known open items: none for Phase 2. Phase 1 serial `STATUS` is now verified.
+| Component | Status |
+|---|---|
+| Display — Phase 1 | Animated face firmware runs on the Waveshare ESP32-C6 1.47" LCD. Nine expressions, BOOT controls and serial commands are implemented. |
+| Board link — Phase 2 | ESP32-WROOM sends face commands to the display over UART. ACKs, heartbeat, timeout and reset recovery were verified on hardware. |
+| Audio — Phase 3 preparation | Host speech software and a formant I2S bring-up firmware target exist. Microphone/speaker hardware and I2S playback have not been brought up. |
+| Piper voice | Local CPU synthesis works on the Mac. Stock Amy is the preferred starting voice; written BMO is spoken as BEEMO. |
+| Expressive voice training | Training tools and Amy's checkpoint are prepared. Curated recordings are still needed; no expressive BMO model has been trained. |
+| Pi integration | Runtime setup and a benchmark command exist. Pi deployment, measured performance, UART PCM streaming and the robot voice service remain unfinished. |
+| Later features | Wake word, Pi-awareness/fallback behavior, notifications and optional advanced conversation are planned. |
 
-## Temporary files
+The project is not yet a complete speaking robot. Completed hardware checks and
+open items are recorded in [DECISIONS.md](DECISIONS.md). The original
+[design and roadmap](CONTEXT.md) contains earlier proposals; later decisions
+supersede its USB runtime-link suggestions and old progress checklist.
 
-Use the repository-local `.tmp/` directory for temporary files, scratch work,
-downloads in progress, and generated audio/reference files. Do not use global
-locations such as `/tmp`, `/private/tmp`, a home/global `.tmp/`, or the
-system-default `TMPDIR` for project files.
+## Try the voice
 
-Before invoking tools that create temporary files, run from the repository root:
+Run from the repository root. First-time setup needs 64-bit Python 3.11–3.13
+and network access to install Piper and download the model:
 
 ```sh
-mkdir -p .tmp
-export TMPDIR="$PWD/.tmp"
+bash voice_demo/setup_piper.sh
+voice_demo/run.sh
+voice_demo/run.sh "Hello! I am BMO."
+voice_demo/run.sh -i
+voice_demo/run.sh --wav .tmp/voice/hello.wav "Hello! I am BMO."
 ```
 
-Configure tool-specific temp/cache locations inside the repo when supported.
-For Python's `tempfile`, pass the repo's `.tmp/` path through `dir=`. Keep venvs,
-caches, and build output local too (`.venv/`, `.venv-piper/`, `.tmp/`, `.pio/`),
-and gitignore generated directories. `.tmp/` is already gitignored. Agent
-instructions enforce this convention in [AGENTS.md](AGENTS.md).
+Normal synthesis uses local model files and runs offline. The demo plays audio
+on the computer running it; it does not yet stream to the robot's speaker.
+Interactive mode keeps the model loaded between lines.
 
-## Voice engine (Phase 3 start)
+The default voice is `en_US-amy-medium`. It is stock Amy, not a trained BMO
+voice. The available `--style` presets change pacing; they did not solve the
+flat emotional delivery heard in testing. `--emotion` requires a model trained
+with the requested condition.
 
-Piper is the preferred voice on the Mac/Pi. It runs a local neural voice model on the CPU and needs no network after the one-time setup. The starting voice is `en_US-amy-medium` at 22,050 Hz; it is a stock English voice, not a trained BMO voice. The small ESP32 formant engine remains an explicit backup.
+The compact ESP32 formant voice remains available as a backup; its host demo
+needs a C++ compiler:
 
-Piper and its model are installed on this Mac. On a fresh checkout, run `voice_demo/setup_piper.sh` once to create the separate `.venv-piper/` and download the voice into gitignored `models/piper/`.
-
-```bash
-voice_demo/run.sh                          # plays the demo phrases
-voice_demo/run.sh "Hello! I am BMO."       # speak a line
-voice_demo/run.sh -i                       # type lines interactively
-voice_demo/run.sh --wav out.wav "text"     # write a WAV only
-voice_demo/run.sh --speed 1.05 "text"      # slightly faster Piper speech
-voice_demo/run.sh --style lively "Yay! We did it!"  # timing/phrasing preset
-voice_demo/run.sh --raw out.pcm "text"     # export 16 kHz mono signed 16-bit PCM
-voice_demo/run.sh --engine formant "text"  # use the standalone ESP32 backup
+```sh
+voice_demo/run.sh --engine formant "Hello! I am BMO."
 ```
 
-Piper controls: `--voice`, `--model`, `--style`, `--speed`, `--volume`, `--speaker`, `--emotion`, `--list-emotions`, `--rate`, `--wav`, `--raw`, `--stdin`, and `-i`. Written `BMO` is spoken as **BEEMO**, with the original text preserved in the console. The model stays loaded across interactive lines. `--style neutral|lively|gentle` changes delivery pacing; Amy does not have trained emotion conditioning. `--emotion` requires an actually trained emotion in the selected model. Native-rate WAV/playback preserves the model's output bandwidth; `--rate 16000` resamples for the planned ESP32 PCM format without changing pitch. See [Piper setup, expression and Pi integration](speech/README.md).
+See [speech setup and controls](speech/README.md) for custom models, PCM export,
+Pi setup and verification.
 
-The expressive voice must run locally on the Pi. Amy is the preferred starting voice, but all existing delivery samples were judged flat. The [training workflow](speech/training/README.md) adapts Amy using real emotional performances, exports a normal Piper ONNX voice, and benchmarks it on the Pi. Training tools and Amy's training checkpoint are installed on this Mac; the curated recordings are still needed. No expressive voice has been trained yet. Song clips remain separate assets initially.
+## Establish BMO's voice
 
-The [voice development record](speech/DEVELOPMENT.md) describes this phase's
-experiments, listening results, cleanup and remaining robot integration work.
-For the next data-collection phase, the [training guide](speech/training/README.md)
-includes clip extraction, emotion-tag definitions, manifest examples, source-based
-holdout and the prepare/train/export commands. Valuable recordings and runs belong
-in gitignored `data/voice/`; use `.tmp/` for disposable scratch and caches.
+The target is a childlike, emotional, playful voice with natural pitch and
+rhythm changes. Amy is the starting checkpoint; expressive recordings must
+teach the performance.
 
-After training, **the exported Piper voice runs on the Raspberry Pi without
-the Mac**. Deploy its `.onnx` and matching `.onnx.json` with the local CPU runtime
-on 64-bit Raspberry Pi OS. Benchmark the actual trained model on the Pi before
-accepting latency/memory use; UART PCM transport and audio hardware still need
-integration.
+1. Gather clean recordings of one consistent voice and keep their source information.
+2. Segment speech, transcribe it exactly, and label the audible performance:
+   `neutral`, `excited`, `concerned` or `playful`. Keep songs as separate assets.
+3. Reserve whole source scenes or recording sessions for evaluation, then audit
+   and prepare the corpus.
+4. Train, compare held-out samples, export the selected checkpoint and benchmark
+   it on the Pi.
 
-The backup in `lib/bmo_voice/` is dependency-free shared C++ that can run directly on the ESP32. Its existing controls (`--pitch`, `--formant`, `--inflect`, `--rough`, `--breath`, `--vibrato`, `--frication`, `--lowpass`, `--crush`, `--hold`, `--volume`, `--clean`, `--mouth`) apply with `--engine formant`. See [its evaluation](voice_demo/EVALUATION.md).
+The [recording, tagging and training guide](speech/training/README.md) includes
+examples and commands. The [voice development record](speech/DEVELOPMENT.md)
+covers the formant experiments, Piper auditions, listening feedback and cleanup.
 
-Firmware bring-up: `.venv/bin/pio run -e voice_esp32_wroom -t upload --upload-port <port>` uses the formant backup for serial-typed lines through an I2S DAC (placeholder pins in `platformio.ini`; builds but not yet run on hardware). It does not yet receive Piper PCM over the Pi UART. `Voice::mouth()` gives 0..255 openness for the backup engine; Piper-to-face/audio transport is future integration work.
+**The exported Piper voice can run locally on the Raspberry Pi with the Mac
+switched off.** Train on the Mac or another training machine, then deploy the
+`.onnx` model and matching `.onnx.json` with the CPU runtime on 64-bit Raspberry
+Pi OS. Performance still needs measuring on the actual Pi.
 
-## Phase 1 (implemented)
+## Firmware and hardware
 
-Phase 1 targets only the Waveshare ESP32-C6 1.47 LCD board and delivers a standalone face engine with:
+The display and Phase 2 link can be used independently of the Pi. The audio
+board's Phase 2 link firmware and Phase 3 formant bring-up firmware are separate
+targets; the latter does not receive Piper PCM.
 
-- default **landscape orientation**
-- Face-only look matched to `bmo-faces.jpg`: the whole LCD is the light-mint screen (`#d2fce4`) with `#171717` eyes/outlines and green mouths; no body, bezel or button is drawn (the physical case provides those). `#ffb600` debug and `#ff66cc` talk indicator dots appear in the top-right corner
-- expression states: `idle`, `happy`, `thinking`, `listening`, `speaking`, `confused`, `sleeping`, `angry`, `sad` (each modeled on a face in `bmo-faces.jpg`)
-- nonblocking animation loop with auto-blink and moving pupils
-- off-screen RGB565 framebuffer; complete frames are flushed to the LCD to avoid visible clear-then-redraw flashes (about 110 KB RAM at landscape resolution)
-- BOOT-button input mapping:
-  - single short press: cycle expressions
-  - double short press: blink
-  - long press: toggle talking animation
-  - very long press: toggle debug auto-cycle
-- serial command control for state/mode changes
+See the [firmware reference](docs/firmware.md) for setup, build/upload commands,
+board pinouts, UART wiring, serial commands and BOOT controls. USB is used for
+flashing and debugging. The planned runtime topology gives the Pi a direct
+UART to each ESP32, while retaining the existing audio-to-display link.
 
 ## Project layout
 
-```text
-.
-├── AGENTS.md
-├── CONTEXT.md
-├── DECISIONS.md
-├── agents/
-├── skills/
-├── platformio.ini
-└── src/
-    └── main.cpp
-```
-
-## Hardware assumptions
-
-This firmware is configured for **Waveshare ESP32-C6-LCD-1.47** pinout:
-
-- MOSI `GPIO6`
-- SCLK `GPIO7`
-- LCD_CS `GPIO14`
-- LCD_DC `GPIO15`
-- LCD_RST `GPIO21`
-- LCD_BL `GPIO22`
-- BOOT button `GPIO9`
-
-These are set as build flags in `platformio.ini` and can be overridden.
-
-Default display tuning flags:
-
-- `BMO_LCD_ROTATION=1` (landscape)
-- `BMO_LCD_IPS=1`
-
-## Build and upload
-
-```bash
-pio run -e waveshare_esp32_c6_lcd_147_4mb
-pio run -e waveshare_esp32_c6_lcd_147_4mb -t upload --upload-port /dev/cu.usbmodemXXXX
-pio device monitor -b 115200
-```
-
-If your board variant is 8MB, use `waveshare_esp32_c6_touch_lcd_147_8mb`.
-
-## Controlling expressions
-
-Send newline-terminated ASCII commands. Expressions: `IDLE HAPPY THINKING LISTENING SPEAKING CONFUSED SLEEPING ANGRY SAD`.
-`STATE HAPPY` and the shorthand `HAPPY` are equivalent. Every command gets a reply (`OK ...` / `ERR ...`) on the link that sent it.
-
-**From your computer (USB):** see [Accessing the terminal interface](#accessing-the-terminal-interface), then type `STATE HAPPY` + Enter.
-
-**From the second ESP32 (audio board) over UART:** wire a cross-connected UART link to the display board's `Serial1`:
-
-| Display board | Audio ESP32 |
+| Path | Purpose |
 |---|---|
-| GPIO17 (RX) | its TX pin |
-| GPIO16 (TX) | its RX pin |
-| GND | GND |
+| [src/](src/) | Display firmware |
+| [audio_src/](audio_src/) | Phase 2 UART link sender |
+| [voice_src/](voice_src/) | Formant voice/I2S bring-up firmware |
+| [lib/bmo_voice/](lib/bmo_voice/) | Shared ESP32/host formant synthesizer |
+| [speech/](speech/) | Piper runtime, emotion selection, training tools and benchmark |
+| [voice_demo/](voice_demo/) | Host demo, setup/training/export scripts and formant evaluation |
+| [platformio.ini](platformio.ini) | Firmware environments and pin configuration |
+| [resources/](resources/) | Face reference and hardware pinout images |
+| [docs/firmware.md](docs/firmware.md) | Firmware operation and wiring reference |
+| `models/`, `data/voice/` | Local models, training checkpoint, curated recordings and runs; gitignored |
+| [AGENTS.md](AGENTS.md) | Agent guidance, environment conventions and links to agent/skill files |
 
-115200 8N1, 3.3 V logic. Pins/baud are overridable via `BMO_PIN_LINK_RX`, `BMO_PIN_LINK_TX`, `BMO_LINK_BAUD`. On the audio ESP32 (Arduino):
+## Next milestones
 
-```cpp
-Serial1.begin(115200, SERIAL_8N1, /*rx=*/RX_PIN, /*tx=*/TX_PIN);
-Serial1.println("LISTENING");   // wake word heard
-Serial1.println("THINKING");    // processing
-Serial1.println("SPEAKING");    // playing reply
-Serial1.println("IDLE");
-```
-
-Verify GPIO16/17 are free on your header before wiring.
-
-## Phase 2: two-board link
-
-The audio-board stand-in (`audio_src/main.cpp`, env `audio_esp32_wroom`) talks to the display over UART with a line protocol:
-
-| Direction | Message | Meaning |
-|---|---|---|
-| audio → display | `FACE <name>` | Set expression; display replies `ACK FACE <NAME>` |
-| audio → display | `PING` (every 1 s) | Heartbeat; display replies `PONG` |
-| display | (3 s of silence) | Prints `LINK LOST -> IDLE`, face returns to IDLE, talk animation off |
-| either | malformed line | `ERR ...` reply, no state change |
-
-The audio board retries an unacknowledged `FACE` up to 3 times (250 ms apart), then gives up. Link wiring (both boards cross-connected):
-
-| Display (C6) | Audio (WROOM) |
-|---|---|
-| GPIO17 (RX) | GPIO17 (TX2) |
-| GPIO16 (TX) | GPIO16 (RX2) |
-| GND | GND |
-
-Audio-board controls: BOOT (GPIO0) button sends the next face; the USB console accepts a face name, `DEMO ON|OFF` (auto-cycle every 3 s) and `RAW <text>` (send an unmodified line, for malformed-input tests).
-
-```bash
-.venv/bin/pio run -e audio_esp32_wroom -t upload --upload-port /dev/cu.usbserial-XXXX
-```
-
-Status: verified on hardware with both boards wired. Tested: face changes with ACK, 1 s heartbeat, malformed lines (`ERR`, state unchanged), repeated commands, the display timing out to IDLE after 3 s of silence, and automatic recovery after resetting either board. Pressing the audio board's BOOT button changing the face on the display was confirmed visually.
-
-Known quirks:
-- GPIO16/17 are the C6's UART0 pins, so its ROM boot log is sent down the link when it resets. The audio board ignores it, but a different pin pair would avoid the noise.
-- The audio board retries a `FACE` that the display rejects with `ERR` until it gives up after 3 tries.
-
-## Serial commands
-
-Commands are newline-delimited, case-insensitive, max 95 characters.
-
-| Command | Effect | Reply |
-|---|---|---|
-| `HELP` | Print the command list | command list |
-| `STATUS` | Print current state | `{"state":"HAPPY","talk":false,"debug":false}` |
-| `NEXT` | Advance to the next expression | `OK STATE <name>` |
-| `BLINK` | Trigger a blink | `OK BLINK` |
-| `STATE <name>` | Set expression | `OK STATE <name>` |
-| `<name>` | Shorthand for `STATE <name>` | `OK STATE <name>` |
-| `TALK ON` / `OFF` / `TOGGLE` | Talking mouth animation | `OK TALK ON\|OFF` |
-| `DEBUG ON` / `OFF` / `TOGGLE` | Auto-cycle expressions every 4 s | `OK DEBUG ON\|OFF` |
-
-`<name>` is one of `IDLE`, `HAPPY`, `THINKING`, `LISTENING`, `SPEAKING`, `CONFUSED`, `SLEEPING`, `ANGRY`, `SAD`.
-
-Errors: `ERR unknown state`, `ERR unknown command`, `ERR TALK expects ON/OFF/TOGGLE`, `ERR DEBUG expects ON/OFF/TOGGLE`, `ERR command too long`.
-
-BOOT button (GPIO9): short press = `NEXT`, double press = `BLINK`, hold ≥1.2 s = `TALK TOGGLE`, hold ≥3 s = `DEBUG TOGGLE`. Each press is logged as `BTN ...`.
-
-## Accessing the terminal interface
-
-The board's USB-C port appears as a serial device (USB-Serial/JTAG, 115200 baud). The same console carries commands, replies, boot messages and button logs.
-
-1. Plug in the board and find the port: `ls /dev/cu.usbmodem*` (macOS) or `ls /dev/ttyACM*` (Linux).
-2. Set up PlatformIO once: `python3 -m venv .venv && .venv/bin/pip install platformio`.
-3. Open the monitor:
-   ```bash
-   .venv/bin/pio device monitor -p /dev/cu.usbmodemXXXX -b 115200 --echo --eol LF
-   ```
-4. Type a command (e.g. `HAPPY`) and press Enter. Exit with Ctrl+C.
-
-Alternatives: `screen /dev/cu.usbmodemXXXX 115200` (exit: Ctrl+A, K, Y), or a one-shot `echo "HAPPY" > /dev/cu.usbmodemXXXX`.
-
-Notes:
-- Only one program can hold the port; close the monitor before flashing.
-- Opening the port can reset the board (DTR/RTS toggle); wait about a second for the boot banner.
-- Do not hold BOOT while connecting; that enters download mode and the face won't show. Hold BOOT + tap RESET only to flash when upload fails.
-- If the port is missing, replug the cable (use a data cable).
+- Curate the expressive speech corpus and train the first voice candidate.
+- Bring up microphone capture and speaker playback on the audio board.
+- Deploy Piper on the Pi and measure synthesis latency and memory.
+- Implement UART audio transport, buffering, face timing and Pi-down behavior.
+- Add wake-word handling and the Pi's local command/conversation service.
