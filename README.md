@@ -7,30 +7,69 @@ Local-first desk robot project inspired by *Adventure Time* BMO.
 - Phase 1 firmware (`src/main.cpp`): animated face on the Waveshare ESP32-C6 1.47" LCD, flashed and running on the dev board.
 - Phase 2 firmware (`audio_src/main.cpp`): ESP32-WROOM stand-in sending `FACE` commands over UART with ACK, heartbeat and timeout. Verified on hardware.
 - PlatformIO project (`platformio.ini`) using the pioarduino platform (required for Arduino on ESP32-C6).
+- Local Piper speech (`speech/`): installed and tested on the Mac, with setup for a 64-bit Raspberry Pi and an explicit formant backup.
 - Agent and skill docs: `AGENTS.md`, `agents/`, `skills/`.
 - Design record: [DECISIONS.md](DECISIONS.md). Roadmap: [CONTEXT.md](CONTEXT.md).
 - Not yet built: audio hardware, wake word, Raspberry Pi link, networking (Phase 3 onward).
 - Known open items: none for Phase 2. Phase 1 serial `STATUS` is now verified.
 
+## Temporary files
+
+Use the repository-local `.tmp/` directory for temporary files, scratch work,
+downloads in progress, and generated audio/reference files. Do not use global
+locations such as `/tmp`, `/private/tmp`, a home/global `.tmp/`, or the
+system-default `TMPDIR` for project files.
+
+Before invoking tools that create temporary files, run from the repository root:
+
+```sh
+mkdir -p .tmp
+export TMPDIR="$PWD/.tmp"
+```
+
+Configure tool-specific temp/cache locations inside the repo when supported.
+For Python's `tempfile`, pass the repo's `.tmp/` path through `dir=`. Keep venvs,
+caches, and build output local too (`.venv/`, `.venv-piper/`, `.tmp/`, `.pio/`),
+and gitignore generated directories. `.tmp/` is already gitignored. Agent
+instructions enforce this convention in [AGENTS.md](AGENTS.md).
+
 ## Voice engine (Phase 3 start)
 
-BMO's speech is a small on-device formant synthesizer (`lib/bmo_voice/`): text, then rule-based phonemes, then a glottal source through formant resonators, then 16 kHz mono PCM. It needs no heap, network or voice files, and the same code runs on the ESP32 and on this computer.
+Piper is the preferred voice on the Mac/Pi. It runs a local neural voice model on the CPU and needs no network after the one-time setup. The starting voice is `en_US-amy-medium` at 22,050 Hz; it is a stock English voice, not a trained BMO voice. The small ESP32 formant engine remains an explicit backup.
 
-Try it on this machine (macOS, no extra installs):
+Piper and its model are installed on this Mac. On a fresh checkout, run `voice_demo/setup_piper.sh` once to create the separate `.venv-piper/` and download the voice into gitignored `models/piper/`.
 
 ```bash
 voice_demo/run.sh                          # plays the demo phrases
 voice_demo/run.sh "Hello! I am BMO."       # speak a line
 voice_demo/run.sh -i                       # type lines interactively
 voice_demo/run.sh --wav out.wav "text"     # write a WAV only
-voice_demo/run.sh --pitch 280 --inflect 1.5 "text"            # tune the voice
+voice_demo/run.sh --speed 1.05 "text"      # slightly faster Piper speech
+voice_demo/run.sh --style lively "Yay! We did it!"  # timing/phrasing preset
+voice_demo/run.sh --raw out.pcm "text"     # export 16 kHz mono signed 16-bit PCM
+voice_demo/run.sh --engine formant "text"  # use the standalone ESP32 backup
 ```
 
-Tuning flags: `--pitch --speed --formant --inflect --rough --breath --vibrato --frication --lowpass --crush --hold --volume`, `--clean` (unprocessed), `--mouth` (prints mouth-openness trace). `--frication` adjusts hiss-producing consonants independently (default `0.30`; lower is gentler). The whole-voice low-pass is bypassed by default; `--lowpass 4200` enables the previous roll-off for comparison. Bit-crush and sample-hold effects are off by default to avoid added static; enable them with `--crush` and `--hold`. Defaults live in `VoiceConfig::bmo()` in `lib/bmo_voice/src/bmo_voice.h`.
+Piper controls: `--voice`, `--model`, `--style`, `--speed`, `--volume`, `--speaker`, `--emotion`, `--list-emotions`, `--rate`, `--wav`, `--raw`, `--stdin`, and `-i`. Written `BMO` is spoken as **BEEMO**, with the original text preserved in the console. The model stays loaded across interactive lines. `--style neutral|lively|gentle` changes delivery pacing; Amy does not have trained emotion conditioning. `--emotion` requires an actually trained emotion in the selected model. Native-rate WAV/playback preserves the model's output bandwidth; `--rate 16000` resamples for the planned ESP32 PCM format without changing pitch. See [Piper setup, expression and Pi integration](speech/README.md).
 
-The current preset uses a 260 Hz speaking register, continuous syllable accents, phrase endings and subtle vibrato, calibrated against an actual BMO monologue. It remains a formant approximation of the voice. See [the evaluation and listening instructions](voice_demo/EVALUATION.md) for measurements, limitations, and repeatable before/after comparisons.
+The expressive voice must run locally on the Pi. Amy is the preferred starting voice, but all existing delivery samples were judged flat. The [training workflow](speech/training/README.md) adapts Amy using real emotional performances, exports a normal Piper ONNX voice, and benchmarks it on the Pi. Training tools and Amy's training checkpoint are installed on this Mac; the curated recordings are still needed. No expressive voice has been trained yet. Song clips remain separate assets initially.
 
-Firmware bring-up: `.venv/bin/pio run -e voice_esp32_wroom -t upload --upload-port <port>` speaks lines typed on the serial console through an I2S DAC (placeholder pins in `platformio.ini`; builds but not yet run on hardware). `Voice::mouth()` gives 0..255 mouth openness for the face's speaking animation.
+The [voice development record](speech/DEVELOPMENT.md) describes this phase's
+experiments, listening results, cleanup and remaining robot integration work.
+For the next data-collection phase, the [training guide](speech/training/README.md)
+includes clip extraction, emotion-tag definitions, manifest examples, source-based
+holdout and the prepare/train/export commands. Valuable recordings and runs belong
+in gitignored `data/voice/`; use `.tmp/` for disposable scratch and caches.
+
+After training, **the exported Piper voice runs on the Raspberry Pi without
+the Mac**. Deploy its `.onnx` and matching `.onnx.json` with the local CPU runtime
+on 64-bit Raspberry Pi OS. Benchmark the actual trained model on the Pi before
+accepting latency/memory use; UART PCM transport and audio hardware still need
+integration.
+
+The backup in `lib/bmo_voice/` is dependency-free shared C++ that can run directly on the ESP32. Its existing controls (`--pitch`, `--formant`, `--inflect`, `--rough`, `--breath`, `--vibrato`, `--frication`, `--lowpass`, `--crush`, `--hold`, `--volume`, `--clean`, `--mouth`) apply with `--engine formant`. See [its evaluation](voice_demo/EVALUATION.md).
+
+Firmware bring-up: `.venv/bin/pio run -e voice_esp32_wroom -t upload --upload-port <port>` uses the formant backup for serial-typed lines through an I2S DAC (placeholder pins in `platformio.ini`; builds but not yet run on hardware). It does not yet receive Piper PCM over the Pi UART. `Voice::mouth()` gives 0..255 openness for the backup engine; Piper-to-face/audio transport is future integration work.
 
 ## Phase 1 (implemented)
 

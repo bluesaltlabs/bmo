@@ -1,5 +1,8 @@
 # BMO voice evaluation — 2026-10-26
 
+This report covers the standalone **formant backup**. The preferred host/Pi
+voice is now Piper; see [Piper setup](../speech/README.md).
+
 The latest hiss/clarity revision is documented at the end of this report. The
 pitch-calibration measurements below describe the preceding tuning pass; both
 local A/B pages are preserved.
@@ -87,7 +90,7 @@ in the gitignored `.tmp/` directory, not embedded in firmware.
 Build the current host demo and write a sample:
 
 ```sh
-voice_demo/run.sh --wav .tmp/voice/current.wav "Hello! I am BMO."
+voice_demo/run.sh --engine formant --wav .tmp/voice/current.wav "Hello! I am BMO."
 ```
 
 The analysis tools alone need numpy/scipy in the repo-local venv; the engine and
@@ -125,7 +128,7 @@ c++ -std=c++17 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
   -Ilib/bmo_voice/src voice_demo/check.cpp lib/bmo_voice/src/bmo_voice.cpp \
   lib/bmo_voice/src/bmo_g2p.cpp -o .tmp/voice/evaluation/check
 .tmp/voice/evaluation/check
-voice_demo/run.sh --wav .tmp/voice/check.wav "Hello! I am BMO."
+voice_demo/run.sh --engine formant --wav .tmp/voice/check.wav "Hello! I am BMO."
 .venv/bin/python voice_demo/check_analysis.py
 ```
 
@@ -198,17 +201,14 @@ Seven Python checks pass, including sibilant/vowel balance and preserved vowel
 harmonics with the output low-pass bypassed. Build the demo and run the checks:
 
 ```sh
-voice_demo/run.sh --wav .tmp/voice/check.wav "Hello! I am BMO."
+voice_demo/run.sh --engine formant --wav .tmp/voice/check.wav "Hello! I am BMO."
 .venv/bin/python voice_demo/check_analysis.py
 ```
 
 The current ESP32-WROOM build passes: **322,564 bytes flash, 24,772 bytes static
 RAM**; the host `Voice` object is 912 bytes. No hardware was flashed or auditioned.
 
-For natural conversational speech, the larger fidelity improvement would come
-from a local neural TTS voice on the Pi, with this compact engine or stored
-clips supporting standalone behavior. An LLM generates dialogue, while a speech
-model generates the waveform. [Piper](https://github.com/OHF-Voice/piper1-gpl) is
-a local neural TTS engine; its stock voices do not establish a BMO match. A
-suitable voice model is still needed for the character's timbre and accent.
-No neural runtime, voice model, cloud dependency, or Pi service was added here.
+Piper has since been installed as the preferred host/Pi voice, while this compact
+engine remains available for standalone behavior. See [the new speech backend](../speech/README.md).
+A suitable neural voice model is still needed to match BMO's timbre and accent;
+the stock Piper voice is a natural-speech starting point.

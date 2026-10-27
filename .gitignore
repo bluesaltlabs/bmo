@@ -1,5 +1,10 @@
 .pio/
 .venv/
+.venv-piper/
+.venv-piper-train/
+models/piper/
+models/checkpoints/
+data/voice/
 .tmp/
 __pycache__/
 .vscode/.browse.c_cpp.db*

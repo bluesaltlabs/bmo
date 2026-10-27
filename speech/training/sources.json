@@ -1,0 +1,17 @@
+{
+  "sources": [
+    {
+      "id": "bmo_if_i_was_grown",
+      "url": "https://www.youtube.com/watch?v=qswatNKP3YY",
+      "audio": ".tmp/voice/evaluation/reference_monologue.wav",
+      "status": "reference_only_unreviewed_for_training",
+      "notes": "Existing 60-second reference. No checked per-utterance transcripts/emotion labels; do not automatically treat it as a curated corpus."
+    },
+    {
+      "id": "cn_storytime_bmo",
+      "url": "https://www.youtube.com/watch?v=hbgMScA70AI",
+      "status": "unavailable_when_download_attempted",
+      "notes": "Public Cartoon Network candidate; yt-dlp reported unavailable. No audio was added to the training corpus."
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+piper-tts[train]==1.8.0
+scipy>=1.14,<2

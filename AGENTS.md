@@ -8,7 +8,10 @@ This project keeps agent guidance in-repo so implementation stays aligned with t
 
 **Current implementation phase:** Phase 3 (audio hardware), not started. See `DECISIONS.md` for what was decided so far.
 
-- Voice engine work lives in `lib/bmo_voice/` (shared ESP32/host code), with the host demo in `voice_demo/` and firmware bring-up in `voice_src/`.
+- Preferred speech is local CPU Piper in `speech/`, with the demo/setup in `voice_demo/`. Piper runs on the Mac/Pi, with local model files and no runtime network requirement.
+- Expressive speech must run locally on the Pi. Training may happen on the Mac or another training machine; the deployed voice must not depend on a running Mac or cloud service. Amy is the preferred starting voice; timing presets alone did not meet the user's emotion requirement. See `speech/training/README.md`.
+- Pronounce the character's name **BEEMO**. Preserve written `BMO`; `speech/text.py` normalizes it for synthesis and training transcripts.
+- `lib/bmo_voice/` is the shared ESP32/host formant backup, selected with `voice_demo/run.sh --engine formant`; firmware bring-up stays in `voice_src/`. Pi PCM transport and audio hardware remain separate bring-up work.
 
 ## Agent registry
 
@@ -37,6 +40,8 @@ This project keeps agent guidance in-repo so implementation stays aligned with t
 
 ## Environment preferences
 
-- Never use the system-wide temp directory (`/tmp`, `$TMPDIR`) for venvs, caches, build output, or scratch files. Keep them inside the repo (e.g. `.venv/`, `.pio/`, `.tmp/`), and make sure they are gitignored.
+- Use this repository's `.tmp/` for project temporary files, scratch work, downloads in progress, and generated audio/reference files. Do not use global temporary locations such as `/tmp`, `/private/tmp`, a home/global `.tmp/`, or the system-default `TMPDIR` for these files.
+- Before running tools that create temporary files, create `.tmp/` and set `TMPDIR` to its absolute repository-local path. From the repo root: `mkdir -p .tmp` followed by `export TMPDIR="$PWD/.tmp"`. Configure tool-specific temporary/cache paths locally when supported; Python `tempfile` calls should use the repo's `.tmp/` via `dir=`.
+- Keep venvs, caches, and build output inside the repo as well (e.g. `.venv/`, `.venv-piper/`, `.tmp/`, `.pio/`). Ensure all generated directories are gitignored; `.tmp/` is already ignored.
 - Run PlatformIO from the repo-local venv: `.venv/bin/pio`.
 - Always pass an explicit `--upload-port` / `-p` (e.g. `/dev/cu.usbmodem*`); auto-detect may pick a Bluetooth port.

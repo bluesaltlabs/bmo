@@ -1,0 +1,25 @@
+id|text|split
+p01|Hello! I am BMO. What are we doing today?|train
+p02|Do you want to play a game with me?|train
+p03|I found something. Come and look at this!|train
+p04|Wait a minute. That is not where it goes.|train
+p05|We can try it the other way around.|train
+p06|I think this is going to be a very good adventure.|train
+p07|Oh! I did not know it could do that.|train
+p08|You did it! I knew you could do it.|train
+p09|Why is the little light blinking?|train
+p10|It is okay. We can work it out together.|train
+p11|I have a very important question for you.|train
+p12|Please wait. I am still waking up.|train
+p13|What happens if I press this button?|train
+p14|I would like to be a tiny detective today.|train
+p15|Can we take the long way home?|train
+p16|Something is making a funny noise.|train
+p17|Look at me! I made a little robot dance.|train
+p18|I have three new things to tell you.|train
+p19|No, no, no. That was my favorite part.|train
+p20|Maybe the answer is hiding under the table.|train
+p21|BMO has a surprise for you. Are you ready?|holdout
+p22|I cannot find my little blue spaceship.|holdout
+p23|We should investigate before we touch anything.|holdout
+p24|Thank you for staying here with me.|holdout
